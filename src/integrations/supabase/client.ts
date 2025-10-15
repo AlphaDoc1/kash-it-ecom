@@ -9,14 +9,29 @@ const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const pathname = typeof window !== 'undefined' ? window.location.pathname : '/';
 const firstSegment = pathname.split('/').filter(Boolean)[0] || '';
 export const sessionNamespace = firstSegment === 'admin' ? 'admin' : firstSegment === 'vendor' ? 'vendor' : 'user';
-export const storageKey = `supabase-auth-${sessionNamespace}`;
+
+// Per-tab session isolation: each browser tab gets its own tabId and storage key
+const getOrCreateTabId = (): string => {
+  try {
+    const existing = window.sessionStorage.getItem('supabase-tab-id');
+    if (existing) return existing;
+    const newId = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    window.sessionStorage.setItem('supabase-tab-id', newId);
+    return newId;
+  } catch {
+    return 'default';
+  }
+};
+
+const tabId = typeof window !== 'undefined' ? getOrCreateTabId() : 'ssr';
+export const storageKey = `supabase-auth-tab-${tabId}`;
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
     storageKey,
     persistSession: true,
     autoRefreshToken: true,
