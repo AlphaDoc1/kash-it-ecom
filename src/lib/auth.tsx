@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase } from '@/integrations/supabase/client';
+import { supabase, storageKey } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 
@@ -110,6 +110,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signOut = async () => {
     await supabase.auth.signOut();
+    try {
+      if (typeof window !== 'undefined' && window?.localStorage) {
+        window.localStorage.removeItem(storageKey);
+      }
+    } catch {
+      // ignore storage errors
+    }
     setUserRoles([]);
     navigate('/auth');
     toast.success('Logged out successfully');

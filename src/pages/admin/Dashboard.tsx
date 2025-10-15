@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Auth from '@/pages/Auth';
 import { useAuth } from '@/lib/auth';
 import { Navbar } from '@/components/Navbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -12,12 +13,18 @@ import { Users, Package, Store, Truck, Send, Ban, RefreshCcw, Check, Eye } from 
 import { toast } from 'sonner';
 
 const AdminDashboard = () => {
-  const { userRoles, user } = useAuth();
+  const { userRoles, user, loading } = useAuth();
   const navigate = useNavigate();
 
-  if (!userRoles.includes('admin')) {
-    navigate('/');
-    return null;
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center"><span className="text-sm text-muted-foreground">Loading…</span></div>
+    );
+  }
+
+  if (!user || !userRoles.includes('admin')) {
+    // Inline admin auth when not authorized
+    return <Auth />;
   }
 
   return (
@@ -229,7 +236,7 @@ const VendorProductsApproval = () => {
   });
 
   const queryClient = useQueryClient();
-  const approveMutation: any = useMutation({
+  const approveMutation: any = (useMutation as any)({
     mutationFn: async (productId: string) => {
       const { error } = await supabase
         .from('products')
@@ -332,16 +339,9 @@ const VendorInvitationsList = () => {
     onError: (err: any) => toast.error(err?.message || 'Failed to revoke'),
   });
 
-  const approveMutation = useMutation<any, any, {
-    id: string;
-    email: string;
-    business_name: string;
-    business_description: string | null;
-    business_address: string | null;
-    gstin: string | null;
-  }>({
+  const approveMutation: any = useMutation({
     // Approve invitation by creating vendor/user role if user exists
-    mutationFn: async (inv) => {
+    mutationFn: async (inv: any) => {
       const normalizedEmail = inv.email.trim().toLowerCase();
 
       // 1) Find existing profile by email

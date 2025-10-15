@@ -13,12 +13,22 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 const VendorDashboard = () => {
-  const { userRoles, user } = useAuth();
+  const { userRoles, user, loading } = useAuth();
   const navigate = useNavigate();
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center"><span className="text-sm text-muted-foreground">Loading…</span></div>
+    );
+  }
+
   if (!userRoles.includes('vendor')) {
-    navigate('/');
-    return null;
+    navigate('/vendor/auth');
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <a href="/vendor/auth" className="text-sm text-primary underline">Go to vendor login</a>
+      </div>
+    );
   }
 
   return (
@@ -126,17 +136,14 @@ const AddProductForm = ({ userId }: { userId: string | null }) => {
         imageUrl = data.publicUrl;
       }
 
-      const { error } = await supabase.from('products').insert({
-        vendor_id: vendor.id,
-        category_id: categoryId,
-        name: name.trim(),
-        description: description.trim() || null,
-        price: Number(price),
-        stock: Number(stock || '0'),
-        unit: unit.trim(),
-        image_url: imageUrl,
-        is_active: true,
-        is_approved: false,
+      const { error } = await (supabase as any).rpc('create_product', {
+        p_category_id: categoryId || null,
+        p_name: name.trim(),
+        p_description: description.trim() || null,
+        p_price: Number(price),
+        p_stock: Number(stock || '0'),
+        p_unit: unit.trim() || null,
+        p_image_url: imageUrl,
       });
       if (error) throw error;
     },

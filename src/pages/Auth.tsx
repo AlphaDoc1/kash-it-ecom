@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { sessionNamespace } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -29,9 +30,17 @@ const Auth = () => {
   const [errors, setErrors] = useState<any>({});
 
   useEffect(() => {
-    if (user) {
-      navigate('/');
+    if (!user) return;
+    // Namespace-aware redirect when already signed in
+    if (sessionNamespace === 'admin') {
+      navigate('/admin');
+      return;
     }
+    if (sessionNamespace === 'vendor') {
+      navigate('/vendor');
+      return;
+    }
+    navigate('/');
   }, [user, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
