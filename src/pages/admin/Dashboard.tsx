@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { Navbar } from '@/components/Navbar';
@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, Package, Store, Truck, Send, Ban, RefreshCcw, Check } from 'lucide-react';
+import { Users, Package, Store, Truck, Send, Ban, RefreshCcw, Check, Eye } from 'lucide-react';
 import { toast } from 'sonner';
 
 const AdminDashboard = () => {
@@ -33,6 +33,15 @@ const AdminDashboard = () => {
 
           <Card className="lg:col-span-2">
             <VendorInvitationsList />
+          </Card>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-6 mb-8">
+          <Card className="lg:col-span-1">
+            <VendorsList />
+          </Card>
+          <Card className="lg:col-span-2">
+            <VendorProductsApproval />
           </Card>
         </div>
 
@@ -128,6 +137,157 @@ const VendorInviteForm = ({ invitedByUserId }: { invitedByUserId: string | null 
           </Button>
         </div>
       </form>
+    </CardContent>
+  );
+};
+
+const VendorsList = () => {
+  const queryClient = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ['admin-vendors'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vendors')
+        .select('id, business_name, is_active, is_approved, profiles:profiles!inner(full_name)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as Array<{ id: string; business_name: string; is_active: boolean | null; is_approved: boolean | null; profiles: { full_name: string } }>; 
+    },
+  });
+
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // set first vendor as selected by default
+    if (!selectedVendorId && data && data.length > 0) {
+      setSelectedVendorId(data[0].id);
+      localStorage.setItem('admin-selected-vendor', data[0].id);
+    }
+  }, [data, selectedVendorId]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem('admin-selected-vendor');
+    if (stored) setSelectedVendorId(stored);
+  }, []);
+
+  useEffect(() => {
+    queryClient.invalidateQueries({ queryKey: ['admin-vendor-products', selectedVendorId] });
+  }, [selectedVendorId, queryClient]);
+
+  if (isLoading) return (
+    <CardContent>
+      <CardHeader className="p-0 mb-4"><CardTitle className="text-xl">Vendors</CardTitle></CardHeader>
+      <p className="text-sm text-muted-foreground">Loading…</p>
+    </CardContent>
+  );
+
+  return (
+    <CardContent>
+      <CardHeader className="p-0 mb-4"><CardTitle className="text-xl">Vendors</CardTitle></CardHeader>
+      {!data || data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No vendors found.</p>
+      ) : (
+        <div className="space-y-2">
+          {data.map((v) => (
+            <button
+              key={v.id}
+              className={`w-full text-left p-3 rounded border ${selectedVendorId === v.id ? 'border-primary' : 'border-muted'}`}
+              onClick={() => {
+                setSelectedVendorId(v.id);
+                localStorage.setItem('admin-selected-vendor', v.id);
+              }}
+            >
+              <div className="font-semibold">{v.business_name}</div>
+              <div className="text-xs text-muted-foreground">Owner: {v.profiles?.full_name || '-'}</div>
+            </button>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  );
+};
+
+const VendorProductsApproval = () => {
+  const [vendorId, setVendorId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setVendorId(localStorage.getItem('admin-selected-vendor'));
+  }, []);
+
+  const { data: products, isLoading, refetch } = useQuery({
+    queryKey: ['admin-vendor-products', vendorId],
+    enabled: !!vendorId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('products')
+        .select('id, name, price, stock, unit, image_url, is_approved')
+        .eq('vendor_id', vendorId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as Array<{ id: string; name: string; price: number; stock: number; unit: string | null; image_url: string | null; is_approved: boolean | null }>;
+    },
+  });
+
+  const queryClient = useQueryClient();
+  const approveMutation: any = useMutation({
+    mutationFn: async (productId: string) => {
+      const { error } = await supabase
+        .from('products')
+        .update({ is_approved: true })
+        .eq('id', productId);
+      if (error) throw error;
+      return { ok: true } as const;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-vendor-products', vendorId] });
+      toast.success('Product approved');
+    },
+    onError: (err: any) => toast.error(err?.message || 'Failed to approve'),
+  });
+
+  return (
+    <CardContent>
+      <div className="flex items-center justify-between mb-4">
+        <CardHeader className="p-0">
+          <CardTitle className="text-xl flex items-center gap-2"><Eye className="h-5 w-5 text-primary" /> Vendor Products</CardTitle>
+        </CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
+        </Button>
+      </div>
+
+      {!vendorId ? (
+        <p className="text-sm text-muted-foreground">Select a vendor to view products.</p>
+      ) : isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : !products || products.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No products found for this vendor.</p>
+      ) : (
+        <div className="grid md:grid-cols-2 gap-4">
+          {products.map((p) => (
+            <div key={p.id} className="p-4 border rounded-md flex gap-3 items-center">
+              <div className="w-16 h-16 bg-muted rounded overflow-hidden flex items-center justify-center">
+                {p.image_url ? (
+                  <img src={p.image_url} alt={p.name} className="object-cover w-full h-full" />
+                ) : (
+                  <Package className="h-6 w-6 text-muted-foreground" />
+                )}
+              </div>
+              <div className="flex-1">
+                <div className="font-semibold">{p.name}</div>
+                <div className="text-sm text-muted-foreground">₹{p.price} • Stock {p.stock}{p.unit ? ` ${p.unit}` : ''}</div>
+              </div>
+              {p.is_approved ? (
+                <span className="text-xs text-green-600">Approved</span>
+              ) : (
+                <Button size="sm" onClick={() => approveMutation.mutate(p.id)} disabled={approveMutation.isPending}>
+                  <Check className="h-4 w-4 mr-2" /> Approve
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </CardContent>
   );
 };
