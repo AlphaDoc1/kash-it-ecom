@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
 import { Navbar } from '@/components/Navbar';
@@ -11,6 +12,8 @@ import { toast } from 'sonner';
 const Checkout = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [paymentMethod, setPaymentMethod] = useState<'cod' | 'online'>('cod');
 
   const { data: cartItems } = useQuery({
     queryKey: ['cart', user?.id],
@@ -42,6 +45,55 @@ const Checkout = () => {
 
   const subtotal = cartItems?.reduce((sum, item) => sum + (item.products.price * item.quantity), 0) || 0;
 
+  const placeCodOrder = useMutation({
+    mutationFn: async () => {
+      if (!user) throw new Error('Not authenticated');
+      if (!cartItems || cartItems.length === 0) throw new Error('Cart empty');
+      if (!addresses || addresses.length === 0) throw new Error('No address');
+
+      const defaultAddress = addresses.find((a: any) => a.is_default) || addresses[0];
+      const orderPayload = {
+        user_id: user.id,
+        address_id: defaultAddress.id,
+        subtotal: Number(subtotal.toFixed(2)),
+        discount_amount: 0,
+        final_amount: Number(subtotal.toFixed(2)),
+        payment_status: 'pending',
+        payment_id: 'COD',
+        delivery_status: 'pending',
+      } as const;
+
+      const { data: order, error: orderErr } = await supabase
+        .from('orders')
+        .insert(orderPayload)
+        .select('id')
+        .single();
+      if (orderErr) throw orderErr;
+
+      const items = cartItems.map((ci: any) => ({
+        order_id: order.id,
+        product_id: ci.products.id,
+        snapshot_name: ci.products.name,
+        snapshot_price: ci.products.price,
+        quantity: ci.quantity,
+      }));
+      const { error: itemsErr } = await supabase.from('order_items').insert(items);
+      if (itemsErr) throw itemsErr;
+
+      const { error: clearErr } = await supabase
+        .from('cart_items')
+        .delete()
+        .eq('user_id', user.id);
+      if (clearErr) throw clearErr;
+    },
+    onSuccess: () => {
+      toast.success('Order placed successfully (COD)');
+      queryClient.invalidateQueries({ queryKey: ['cart', user?.id] });
+      navigate('/orders');
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to place order'),
+  });
+
   if (!user) {
     navigate('/auth');
     return null;
@@ -58,8 +110,11 @@ const Checkout = () => {
       navigate('/profile');
       return;
     }
-
-    toast.info('Payment integration coming soon! This is a demo checkout.');
+    if (paymentMethod === 'cod') {
+      placeCodOrder.mutate();
+    } else {
+      toast.info('Online payment coming soon');
+    }
   };
 
   return (
@@ -128,15 +183,37 @@ const Checkout = () => {
                 </div>
               </div>
 
-              <div className="border-t pt-4 mb-6">
+              <div className="border-t pt-4 mb-4">
                 <div className="flex justify-between text-lg font-bold">
                   <span>Total</span>
                   <span className="text-primary">₹{subtotal.toFixed(2)}</span>
                 </div>
               </div>
 
+              <div className="space-y-3 mb-6">
+                <h3 className="font-semibold">Payment Method</h3>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={paymentMethod === 'cod'}
+                    onChange={() => setPaymentMethod('cod')}
+                  />
+                  Cash on Delivery (COD)
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="radio"
+                    name="payment"
+                    checked={paymentMethod === 'online'}
+                    onChange={() => setPaymentMethod('online')}
+                  />
+                  Online Payment (Razorpay)
+                </label>
+              </div>
+
               <Button size="lg" className="w-full" onClick={handlePlaceOrder}>
-                Place Order
+                {paymentMethod === 'cod' ? (placeCodOrder.isPending ? 'Placing…' : 'Place Order (COD)') : 'Place Order (Online)'}
               </Button>
             </Card>
           </div>

@@ -45,6 +45,15 @@ const AdminDashboard = () => {
 
         <div className="grid lg:grid-cols-3 gap-6 mb-8">
           <Card className="lg:col-span-1">
+            <DeliveryApplicationsList />
+          </Card>
+          <Card className="lg:col-span-2">
+            <DeliveryApplicationsActions />
+          </Card>
+        </div>
+
+        <div className="grid lg:grid-cols-3 gap-6 mb-8">
+          <Card className="lg:col-span-1">
             <VendorsList />
           </Card>
           <Card className="lg:col-span-2">
@@ -57,6 +66,15 @@ const AdminDashboard = () => {
           <Card><CardHeader><Package className="h-8 w-8 text-primary mb-2" /><CardTitle>Products</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">-</p></CardContent></Card>
           <Card><CardHeader><Store className="h-8 w-8 text-primary mb-2" /><CardTitle>Vendors</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">-</p></CardContent></Card>
           <Card><CardHeader><Truck className="h-8 w-8 text-primary mb-2" /><CardTitle>Orders</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">-</p></CardContent></Card>
+        </div>
+
+        <div className="grid lg:grid-cols-2 gap-6 mt-8">
+          <Card>
+            <VendorsCrud />
+          </Card>
+          <Card>
+            <DeliveryPartnersCrud />
+          </Card>
         </div>
       </div>
     </div>
@@ -147,6 +165,345 @@ const VendorInviteForm = ({ invitedByUserId }: { invitedByUserId: string | null 
     </CardContent>
   );
 };
+const DeliveryApplicationsList = () => {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['delivery-applications'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('delivery_applications')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as Array<{ id: string; full_name: string; email: string; phone: string | null; vehicle_type: string | null; vehicle_number: string | null; status: string }>;
+    },
+  });
+
+  return (
+    <CardContent>
+      <div className="flex items-center justify-between mb-4">
+        <CardHeader className="p-0"><CardTitle className="text-xl">Delivery Applications</CardTitle></CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()}><RefreshCcw className="h-4 w-4 mr-2" /> Refresh</Button>
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : !data || data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No applications</p>
+      ) : (
+        <div className="space-y-2">
+          {data.map((a) => (
+            <div key={a.id} className="p-3 border rounded">
+              <div className="font-semibold">{a.full_name} <span className="text-xs text-muted-foreground">({a.email})</span></div>
+              <div className="text-xs text-muted-foreground">Status: {a.status}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  );
+};
+
+const VendorsCrud = () => {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['admin-vendors-crud'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('vendors')
+        .select('id, business_name, business_description, business_address, gstin, is_active, is_approved, user_id')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+
+  const queryClient = useQueryClient();
+  const toggleActive: any = useMutation({
+    mutationFn: async (v: any) => {
+      const { error } = await supabase
+        .from('vendors')
+        .update({ is_active: !v.is_active })
+        .eq('id', v.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-vendors-crud'] });
+      toast.success('Vendor updated');
+    },
+  });
+
+  const toggleApproved: any = useMutation({
+    mutationFn: async (v: any) => {
+      const { error } = await supabase
+        .from('vendors')
+        .update({ is_approved: !v.is_approved })
+        .eq('id', v.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-vendors-crud'] });
+      toast.success('Vendor approval toggled');
+    },
+  });
+
+  const removeVendor: any = useMutation({
+    mutationFn: async (v: any) => {
+      const { error } = await supabase
+        .from('vendors')
+        .delete()
+        .eq('id', v.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-vendors-crud'] });
+      toast.success('Vendor deleted');
+    },
+  });
+
+  return (
+    <CardContent>
+      <div className="flex items-center justify-between mb-4">
+        <CardHeader className="p-0"><CardTitle className="text-xl">Manage Vendors</CardTitle></CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()}><RefreshCcw className="h-4 w-4 mr-2" /> Refresh</Button>
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : !data || data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No vendors found</p>
+      ) : (
+        <div className="space-y-2">
+          {data.map((v: any) => (
+            <div key={v.id} className="p-4 border rounded flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-semibold truncate">{v.business_name}</div>
+                <div className="text-xs text-muted-foreground">Approved: {v.is_approved ? 'Yes' : 'No'} • Active: {v.is_active ? 'Yes' : 'No'}</div>
+                {v.business_address ? <div className="text-xs text-muted-foreground truncate">{v.business_address}</div> : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => toggleApproved.mutate(v)}>{v.is_approved ? 'Unapprove' : 'Approve'}</Button>
+                <Button size="sm" variant="outline" onClick={() => toggleActive.mutate(v)}>{v.is_active ? 'Deactivate' : 'Activate'}</Button>
+                <Button size="sm" variant="destructive" onClick={() => removeVendor.mutate(v)}>Delete</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  );
+};
+
+const DeliveryPartnersCrud = () => {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['admin-delivery-partners-crud'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('delivery_partners')
+        .select('id, user_id, vehicle_type, vehicle_number, is_verified, is_active, profiles:profiles!inner(full_name, email)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+
+  const queryClient = useQueryClient();
+  const toggleActive: any = useMutation({
+    mutationFn: async (p: any) => {
+      const { error } = await supabase
+        .from('delivery_partners')
+        .update({ is_active: !p.is_active })
+        .eq('id', p.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-delivery-partners-crud'] });
+      toast.success('Delivery partner updated');
+    },
+  });
+
+  const toggleVerified: any = useMutation({
+    mutationFn: async (p: any) => {
+      const { error } = await supabase
+        .from('delivery_partners')
+        .update({ is_verified: !p.is_verified })
+        .eq('id', p.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-delivery-partners-crud'] });
+      toast.success('Delivery partner verification toggled');
+    },
+  });
+
+  const removePartner: any = useMutation({
+    mutationFn: async (p: any) => {
+      const { error } = await supabase
+        .from('delivery_partners')
+        .delete()
+        .eq('id', p.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-delivery-partners-crud'] });
+      toast.success('Delivery partner deleted');
+    },
+  });
+
+  return (
+    <CardContent>
+      <div className="flex items-center justify-between mb-4">
+        <CardHeader className="p-0"><CardTitle className="text-xl">Manage Delivery Partners</CardTitle></CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()}><RefreshCcw className="h-4 w-4 mr-2" /> Refresh</Button>
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : !data || data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No delivery partners found</p>
+      ) : (
+        <div className="space-y-2">
+          {data.map((p: any) => (
+            <div key={p.id} className="p-4 border rounded flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="font-semibold truncate">{p.profiles?.full_name || '-'} <span className="text-xs text-muted-foreground">({p.profiles?.email || '-'})</span></div>
+                <div className="text-xs text-muted-foreground">Verified: {p.is_verified ? 'Yes' : 'No'} • Active: {p.is_active ? 'Yes' : 'No'}</div>
+                <div className="text-xs text-muted-foreground">{p.vehicle_type || '-'} • {p.vehicle_number || '-'}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" onClick={() => toggleVerified.mutate(p)}>{p.is_verified ? 'Unverify' : 'Verify'}</Button>
+                <Button size="sm" variant="outline" onClick={() => toggleActive.mutate(p)}>{p.is_active ? 'Deactivate' : 'Activate'}</Button>
+                <Button size="sm" variant="destructive" onClick={() => removePartner.mutate(p)}>Delete</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  );
+};
+
+const DeliveryApplicationsActions = () => {
+  const { data, refetch } = useQuery({
+    queryKey: ['delivery-applications-pending'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('delivery_applications')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      return data as Array<{ id: string; full_name: string; email: string; phone: string | null; vehicle_type: string | null; vehicle_number: string | null; status: string }>;
+    },
+  });
+
+  const queryClient = useQueryClient();
+  const approve: any = useMutation({
+    mutationFn: async (app: any) => {
+      // 1) Mark as approved
+      const { error: updErr } = await (supabase as any)
+        .from('delivery_applications')
+        .update({ status: 'approved' })
+        .eq('id', app.id)
+        .eq('status', 'pending');
+      if (updErr) throw updErr;
+
+      // 2) If a profile already exists with this email, immediately link: create partner and grant role
+      const { data: profile, error: profErr } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('email', app.email)
+        .maybeSingle();
+      if (profErr) throw profErr;
+
+      if (profile?.id) {
+        // Create delivery_partners if missing
+        const { data: existing, error: existErr } = await supabase
+          .from('delivery_partners')
+          .select('id')
+          .eq('user_id', profile.id)
+          .maybeSingle();
+        if (existErr) throw existErr;
+        if (!existing) {
+          const { error: insErr } = await supabase
+            .from('delivery_partners')
+            .insert({
+              user_id: profile.id,
+              vehicle_type: app.vehicle_type || null,
+              vehicle_number: app.vehicle_number || null,
+              is_verified: true,
+              is_active: true,
+            });
+          if (insErr) throw insErr;
+        }
+
+        // Grant delivery role if missing
+        const { data: roles, error: rolesErr } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', profile.id);
+        if (rolesErr) throw rolesErr;
+        const hasDelivery = (roles || []).some((r) => r.role === 'delivery');
+        if (!hasDelivery) {
+          const { error: roleErr } = await supabase
+            .from('user_roles')
+            .insert({ user_id: profile.id, role: 'delivery' as any });
+          if (roleErr) throw roleErr;
+        }
+
+        // Mark application linked
+        const { error: linkErr } = await (supabase as any)
+          .from('delivery_applications')
+          .update({ status: 'linked', linked_user_id: profile.id })
+          .eq('id', app.id);
+        if (linkErr) throw linkErr;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['delivery-applications'] });
+      queryClient.invalidateQueries({ queryKey: ['delivery-applications-pending'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-delivery-partners-crud'] });
+      toast.success('Delivery application approved');
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to approve'),
+  });
+
+  const reject: any = useMutation({
+    mutationFn: async (app: any) => {
+      const { error } = await (supabase as any)
+        .from('delivery_applications')
+        .update({ status: 'rejected' })
+        .eq('id', app.id)
+        .eq('status', 'pending');
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['delivery-applications'] });
+      queryClient.invalidateQueries({ queryKey: ['delivery-applications-pending'] });
+    },
+  });
+
+  return (
+    <CardContent>
+      <CardHeader className="p-0 mb-4"><CardTitle className="text-xl">Pending Delivery Approvals</CardTitle></CardHeader>
+      {!data || data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No pending applications</p>
+      ) : (
+        <div className="space-y-2">
+          {data.map((a) => (
+            <div key={a.id} className="p-4 border rounded flex items-center justify-between">
+              <div>
+                <div className="font-semibold">{a.full_name}</div>
+                <div className="text-xs text-muted-foreground">{a.email} • {a.phone || '-'}</div>
+                <div className="text-xs text-muted-foreground">{a.vehicle_type || '-'} • {a.vehicle_number || '-'}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button size="sm" onClick={() => approve.mutate(a)}><Check className="h-4 w-4 mr-2" /> Approve</Button>
+                <Button size="sm" variant="destructive" onClick={() => reject.mutate(a)}>Reject</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  );
+};
+
 
 const VendorsList = () => {
   const queryClient = useQueryClient();

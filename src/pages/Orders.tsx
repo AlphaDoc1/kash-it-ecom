@@ -17,7 +17,7 @@ const Orders = () => {
       if (!user) return [];
       const { data, error } = await supabase
         .from('orders')
-        .select('*, order_items(*, products(name))')
+        .select('*, order_items(*, products(name, vendors(business_name)))')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -41,6 +41,9 @@ const Orders = () => {
     };
     return colors[status] || 'bg-gray-500';
   };
+
+  const formatStatus = (status: string) =>
+    status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 
   return (
     <div className="min-h-screen bg-background">
@@ -76,7 +79,7 @@ const Orders = () => {
                       </p>
                     </div>
                     <Badge className={getStatusColor(order.delivery_status)}>
-                      {order.delivery_status.replace('_', ' ')}
+                      {formatStatus(order.delivery_status)}
                     </Badge>
                   </div>
                 </CardHeader>
@@ -84,7 +87,12 @@ const Orders = () => {
                   <div className="space-y-2 mb-4">
                     {order.order_items?.map((item) => (
                       <div key={item.id} className="flex justify-between text-sm">
-                        <span>{item.products?.name} x {item.quantity}</span>
+                        <div className="flex flex-col">
+                          <span className="font-medium">{item.products?.name} x {item.quantity}</span>
+                          {item.products?.vendors?.business_name && (
+                            <span className="text-xs text-muted-foreground">Vendor: {item.products.vendors.business_name}</span>
+                          )}
+                        </div>
                         <span className="font-semibold">₹{(item.snapshot_price * item.quantity).toFixed(2)}</span>
                       </div>
                     ))}

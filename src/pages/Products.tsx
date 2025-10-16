@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Navbar } from '@/components/Navbar';
@@ -10,8 +10,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ShoppingBag, Search } from 'lucide-react';
 
 const Products = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
+
+  // Initialize category filter from URL query (?category=ID)
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const categoryFromUrl = params.get('category');
+    if (categoryFromUrl) {
+      setCategoryFilter(categoryFromUrl);
+    } else {
+      setCategoryFilter('all');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   const { data: categories } = useQuery({
     queryKey: ['categories'],
@@ -66,7 +80,19 @@ const Products = () => {
               className="pl-10"
             />
           </div>
-          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+          <Select
+            value={categoryFilter}
+            onValueChange={(value) => {
+              setCategoryFilter(value);
+              const params = new URLSearchParams(location.search);
+              if (value === 'all') {
+                params.delete('category');
+              } else {
+                params.set('category', value);
+              }
+              navigate({ pathname: '/products', search: params.toString() });
+            }}
+          >
             <SelectTrigger className="w-full md:w-64">
               <SelectValue placeholder="Filter by category" />
             </SelectTrigger>
