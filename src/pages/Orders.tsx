@@ -10,6 +10,7 @@ import LiveMap from '@/components/LiveMap';
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Package } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Orders = () => {
   const { user } = useAuth();
@@ -28,6 +29,9 @@ const Orders = () => {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
+      if (data) {
+        console.log('Order statuses (live):', data.map(o => ({id: o.id, status: o.delivery_status})));
+      }
       return data;
     },
     enabled: !!user,
@@ -70,19 +74,32 @@ const Orders = () => {
     return null;
   }
 
+  const steps = ['pending','approved','assigned','picked_up','out_for_delivery','delivered','rejected_by_vendor'];
+
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
       pending: 'bg-yellow-500',
+      approved: 'bg-green-400',
       assigned: 'bg-blue-500',
+      picked_up: 'bg-violet-500',
       out_for_delivery: 'bg-purple-500',
       delivered: 'bg-green-500',
       cancelled: 'bg-red-500',
+      rejected_by_vendor: 'bg-red-600',
     };
     return colors[status] || 'bg-gray-500';
   };
 
-  const formatStatus = (status: string) =>
-    status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const formatStatus = (status: string) => {
+    switch (status) {
+      case 'picked_up': return 'Picked Up';
+      case 'out_for_delivery': return 'Out for Delivery';
+      case 'approved': return 'Approved';
+      case 'assigned': return 'Assigned';
+      case 'rejected_by_vendor': return 'Rejected by Vendor';
+      default: return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+  }
 
   // Hide user-deleted or vendor-deleted orders by default
   const filteredOrders = (orders || []).filter((order: any) => {
@@ -149,7 +166,7 @@ const Orders = () => {
                     <span>Total</span>
                     <span className="text-primary">₹{order.final_amount}</span>
                   </div>
-                  {(order.delivery_status === 'delivered' || order.delivery_status === 'cancelled') && (
+                  {(order.delivery_status === 'delivered' || order.delivery_status === 'rejected_by_vendor' || order.delivery_status === 'cancelled') && (
                     <div className="pt-3 flex justify-end">
                       <Button variant="outline" size="sm" onClick={() => deleteOrder.mutate(order.id)} disabled={deleteOrder.isPending}>
                         Delete Order
@@ -169,13 +186,23 @@ const Orders = () => {
 export default Orders;
 
 const StatusTimeline = ({ status }: { status: string }) => {
-  const steps = ['pending','approved','picked_up','out_for_delivery','delivered'];
+  const steps = ['pending','approved','assigned','picked_up','out_for_delivery','delivered','rejected_by_vendor'];
+  const formatStatus = (status: string) => {
+    switch (status) {
+      case 'picked_up': return 'Picked Up';
+      case 'out_for_delivery': return 'Out for Delivery';
+      case 'approved': return 'Approved';
+      case 'assigned': return 'Assigned';
+      case 'rejected_by_vendor': return 'Rejected by Vendor';
+      default: return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+    }
+  };
   const currentIndex = Math.max(0, steps.indexOf((status || 'pending').toLowerCase()));
   return (
     <div className="flex items-center gap-2 mb-3 text-xs">
       {steps.map((s, i) => (
         <div key={s} className="flex items-center gap-2">
-          <span className={`px-2 py-1 rounded ${i <= currentIndex ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}>{s.replace(/_/g,' ')}</span>
+          <span className={`px-2 py-1 rounded ${i <= currentIndex ? 'bg-primary text-white' : 'bg-muted text-muted-foreground'}`}>{formatStatus(s)}</span>
           {i < steps.length - 1 ? <span className="text-muted-foreground">›</span> : null}
         </div>
       ))}

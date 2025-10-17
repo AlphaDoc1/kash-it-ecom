@@ -113,6 +113,20 @@ const AssignedRequests = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [hiddenRequestIds, setHiddenRequestIds] = useState<string[]>([] as string[]);
+  const HIDDEN_STORAGE_KEY = 'hiddenDeliveryRequestIds';
+
+  // Load hidden list from localStorage so removed items stay hidden after refresh
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(HIDDEN_STORAGE_KEY) || '[]');
+      if (Array.isArray(saved)) setHiddenRequestIds(saved);
+    } catch {}
+  }, []);
+
+  const persistHidden = (next: string[]) => {
+    setHiddenRequestIds(next);
+    try { localStorage.setItem(HIDDEN_STORAGE_KEY, JSON.stringify(next)); } catch {}
+  };
 
   const { data: partner } = useQuery({
     queryKey: ['delivery-partner', user?.id],
@@ -134,7 +148,7 @@ const AssignedRequests = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('delivery_requests')
-        .select('*')
+        .select('*, orders(delivery_status)')
         .eq('assigned_partner_id', partner!.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
@@ -153,7 +167,8 @@ const AssignedRequests = () => {
       // Likely blocked by RLS: hide locally so dashboard is cleaned
       toast('Removed locally');
     } finally {
-      setHiddenRequestIds((prev) => [...prev, requestId]);
+      const next = Array.from(new Set([...(hiddenRequestIds || []), requestId]));
+      persistHidden(next);
       refetch();
     }
   };
@@ -171,6 +186,15 @@ const AssignedRequests = () => {
         .update({ status: newStatus })
         .eq('id', requestId);
       if (updErr) throw updErr;
+
+      // If accepted, reflect in orders table so user/vendor see live 'approved'
+      if (action === 'accepted') {
+        // Find the request to get order_id
+        const req = (requests || []).find((r: any) => r.id === requestId);
+        if (req?.order_id) {
+          await supabase.from('orders').update({ delivery_status: 'approved' as any }).eq('id', req.order_id);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner?.id] });
@@ -185,6 +209,11 @@ const AssignedRequests = () => {
         .update({ status: 'picked_up', picked_up_at: new Date().toISOString() })
         .eq('id', request.id);
       if (error) throw error;
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ delivery_status: 'picked_up' })
+        .eq('id', request.order_id);
+      if (orderError) throw orderError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner?.id] });
@@ -198,8 +227,11 @@ const AssignedRequests = () => {
         .update({ status: 'out_for_delivery' })
         .eq('id', request.id);
       if (error) throw error;
-      // also link orders.delivery_status if accessible to partner (optional, best via trigger)
-      await supabase.from('orders').update({ delivery_status: 'out_for_delivery' as any }).eq('id', request.order_id);
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ delivery_status: 'out_for_delivery' })
+        .eq('id', request.order_id);
+      if (orderError) throw orderError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner?.id] });
@@ -213,7 +245,11 @@ const AssignedRequests = () => {
         .update({ status: 'delivered', delivered_at: new Date().toISOString() })
         .eq('id', request.id);
       if (error) throw error;
-      await supabase.from('orders').update({ delivery_status: 'delivered' as any }).eq('id', request.order_id);
+      const { error: orderError } = await supabase
+        .from('orders')
+        .update({ delivery_status: 'delivered' })
+        .eq('id', request.order_id);
+      if (orderError) throw orderError;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner?.id] });
@@ -335,13 +371,13 @@ const AssignedRequests = () => {
           {requests.filter((r: any) => !hiddenRequestIds.includes(r.id)).map((r: any) => (
             <Card key={r.id}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Order #{r.order_id?.slice(0,8)} <span className="text-xs uppercase ml-2 text-muted-foreground">{r.status}</span></CardTitle>
+                <CardTitle className="text-lg">Order #{r.order_id?.slice(0,8)} <span className="text-xs uppercase ml-2 text-muted-foreground">{r.orders?.delivery_status || r.status || 'pending'}</span></CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="text-sm">
                   <div>Vendor: <span className="font-medium">{r.vendors?.business_name || r.vendor_id}</span></div>
                 </div>
-                {r.status === 'assigned' && (
+                {(r.orders?.delivery_status === 'assigned' || r.status === 'assigned') && (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => respond.mutate({ requestId: r.id, action: 'accepted' })}>
                       <Check className="h-4 w-4 mr-1" /> Accept
@@ -353,27 +389,27 @@ const AssignedRequests = () => {
                   </div>
                 )}
 
-                {r.status === 'accepted' && (
+                {(r.orders?.delivery_status === 'assigned' || r.status === 'accepted') && (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => openNavToVendor(r)}>Open Navigation to Vendor</Button>
                     <Button size="sm" variant="outline" onClick={() => markPickedUp.mutate(r)}>Mark Picked Up</Button>
                   </div>
                 )}
 
-                {r.status === 'picked_up' && (
+                {(r.orders?.delivery_status === 'picked_up' || r.status === 'picked_up') && (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => { openNavToCustomer(r); markOutForDelivery.mutate(r); }}>Out for Delivery</Button>
                   </div>
                 )}
 
-                {r.status === 'out_for_delivery' && (
+                {(r.orders?.delivery_status === 'out_for_delivery' || r.status === 'out_for_delivery') && (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => openNavToCustomer(r)}>Open Navigation to Customer</Button>
                     <Button size="sm" variant="outline" onClick={() => markDelivered.mutate(r)}>Mark as Delivered</Button>
                   </div>
                 )}
 
-                {r.status === 'delivered' && (
+                {(r.orders?.delivery_status === 'delivered' || r.status === 'delivered') && (
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => removeFromDashboard(r.id)}>Delete</Button>
                   </div>

@@ -724,17 +724,19 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
                 size="sm"
                 variant="outline"
                 onClick={() => assignNearest.mutate(o.id)}
-                disabled={assignNearest.isPending || vendor?.latitude == null || vendor?.longitude == null}
-                title={vendor?.latitude == null || vendor?.longitude == null ? 'Set shop location first' : ''}
+                disabled={assignNearest.isPending || vendor?.latitude == null || vendor?.longitude == null || ['assigned','picked_up','out_for_delivery','delivered'].includes(o.delivery_status)}
+                title={vendor?.latitude == null || vendor?.longitude == null ? 'Set shop location first' : o.delivery_status === 'assigned' ? 'Already Assigned' : ''}
               >
-                <Check className="h-4 w-4 mr-1" /> {assignNearest.isPending ? 'Assigning…' : 'Approve & Assign'}
+                <Check className="h-4 w-4 mr-1" /> {['assigned','picked_up','out_for_delivery','delivered'].includes(o.delivery_status) ? 'Already Assigned' : assignNearest.isPending ? 'Assigning…' : 'Approve & Assign'}
               </Button>
               <Button size="sm" variant="destructive" onClick={() => rejectOrder.mutate(o.id)} disabled={rejectOrder.isPending}>
                 <X className="h-4 w-4 mr-1" /> Reject
               </Button>
-              <Button size="sm" variant="outline" onClick={() => deleteOrder.mutate(o.id)} disabled={deleteOrder.isPending}>
-                <Trash2 className="h-4 w-4 mr-1" /> Delete
-              </Button>
+              {(o.delivery_status === 'delivered' || o.delivery_status === 'cancelled' || o.delivery_status === 'rejected_by_vendor') && (
+                <Button size="sm" variant="outline" onClick={() => deleteOrder.mutate(o.id)} disabled={deleteOrder.isPending}>
+                  <Trash2 className="h-4 w-4 mr-1" /> Delete
+                </Button>
+              )}
             </div>
           </div>
         </div>
