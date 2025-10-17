@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -7,7 +7,8 @@ import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { User } from 'lucide-react';
+import { User, Edit, Save, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 const Profile = () => {
   const { user } = useAuth();
@@ -76,6 +77,41 @@ const Profile = () => {
     is_default: false,
   });
 
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    full_name: '',
+    phone: '',
+  });
+
+  // Update profile form when profile data loads
+  useEffect(() => {
+    if (profile) {
+      setProfileForm({
+        full_name: profile.full_name || '',
+        phone: profile.phone || '',
+      });
+    }
+  }, [profile]);
+
+  const updateProfile = useMutation({
+    mutationFn: async (payload: { full_name: string; phone: string }) => {
+      if (!user) throw new Error('Not authenticated');
+      const { error } = await supabase
+        .from('profiles')
+        .update(payload)
+        .eq('id', user.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['profile', user?.id] });
+      setIsEditingProfile(false);
+      toast.success('Profile updated successfully!');
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'Failed to update profile');
+    },
+  });
+
   if (!user) {
     navigate('/auth');
     return null;
@@ -102,15 +138,86 @@ const Profile = () => {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium text-muted-foreground">Phone</label>
-                <p className="text-lg">{profile?.phone || 'Not provided'}</p>
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Personal Information</h3>
+                {!isEditingProfile ? (
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={() => setIsEditingProfile(true)}
+                  >
+                    <Edit className="h-4 w-4 mr-2" /> Edit
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Button 
+                      size="sm" 
+                      onClick={() => updateProfile.mutate(profileForm)}
+                      disabled={updateProfile.isPending || !profileForm.full_name.trim()}
+                    >
+                      <Save className="h-4 w-4 mr-2" /> Save
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        setIsEditingProfile(false);
+                        setProfileForm({
+                          full_name: profile?.full_name || '',
+                          phone: profile?.phone || '',
+                        });
+                      }}
+                    >
+                      <X className="h-4 w-4 mr-2" /> Cancel
+                    </Button>
+                  </div>
+                )}
               </div>
+
+              {isEditingProfile ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Full Name</label>
+                    <Input 
+                      value={profileForm.full_name} 
+                      onChange={(e) => setProfileForm({ ...profileForm, full_name: e.target.value })}
+                      placeholder="Enter your full name"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Phone Number</label>
+                    <Input 
+                      value={profileForm.phone} 
+                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
+                      placeholder="Enter your phone number"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Full Name</label>
+                    <p className="text-lg">{profile?.full_name || 'Not provided'}</p>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-muted-foreground">Phone</label>
+                    <p className="text-lg">{profile?.phone || 'Not provided'}</p>
+                  </div>
+                </div>
+              )}
               
               <div>
                 <label className="text-sm font-medium text-muted-foreground">Account Status</label>
                 <p className="text-lg">{profile?.is_verified ? 'Verified' : 'Not Verified'}</p>
               </div>
+
+              {(!profile?.full_name || !profile?.phone) && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Complete your profile:</strong> Please add your full name and phone number to ensure proper order processing and delivery.
+                  </p>
+                </div>
+              )}
 
               <div className="pt-4">
                 <Button onClick={() => navigate('/orders')}>View Orders</Button>

@@ -9,8 +9,9 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, Package, Store, Truck, Send, Ban, RefreshCcw, Check, Eye } from 'lucide-react';
+import { Users, Package, Store, Truck, Send, Ban, RefreshCcw, Check, Eye, UserCheck } from 'lucide-react';
 import { toast } from 'sonner';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const AdminDashboard = () => {
   const { userRoles, user, loading } = useAuth();
@@ -33,55 +34,368 @@ const AdminDashboard = () => {
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold mb-8">Admin Dashboard</h1>
 
-        <div className="grid lg:grid-cols-3 gap-6 mb-8">
-          <Card className="lg:col-span-1">
-            <VendorInviteForm invitedByUserId={user?.id ?? null} />
-          </Card>
-
-          <Card className="lg:col-span-2">
-            <VendorInvitationsList />
-          </Card>
+        {/* Statistics Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+          <StatsCard title="Users" icon={<Users className="h-4 w-4" />} queryKey="admin-users-count" />
+          <StatsCard title="Products" icon={<Package className="h-4 w-4" />} queryKey="admin-products-count" />
+          <StatsCard title="Vendors" icon={<Store className="h-4 w-4" />} queryKey="admin-vendors-count" />
+          <StatsCard title="Orders" icon={<Truck className="h-4 w-4" />} queryKey="admin-orders-count" />
+          <StatsCard title="Delivery Partners" icon={<UserCheck className="h-4 w-4" />} queryKey="admin-delivery-count" />
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6 mb-8">
-          <Card className="lg:col-span-1">
-            <DeliveryApplicationsList />
-          </Card>
-          <Card className="lg:col-span-2">
-            <DeliveryApplicationsActions />
-          </Card>
-        </div>
+        <Tabs defaultValue="vendors" className="w-full">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="vendors">Vendors</TabsTrigger>
+            <TabsTrigger value="delivery">Delivery Partners</TabsTrigger>
+            <TabsTrigger value="products">Products</TabsTrigger>
+            <TabsTrigger value="orders">Orders</TabsTrigger>
+          </TabsList>
 
-        <div className="grid lg:grid-cols-3 gap-6 mb-8">
-          <Card className="lg:col-span-1">
-            <VendorsList />
-          </Card>
-          <Card className="lg:col-span-2">
-            <VendorProductsApproval />
-          </Card>
-        </div>
+          <TabsContent value="vendors" className="space-y-6">
+            <div className="grid lg:grid-cols-3 gap-6">
+              <Card className="lg:col-span-1">
+                <VendorInviteForm invitedByUserId={user?.id ?? null} />
+              </Card>
+              <Card className="lg:col-span-2">
+                <VendorInvitationsList />
+              </Card>
+            </div>
+            <div className="grid lg:grid-cols-3 gap-6">
+              <Card className="lg:col-span-1">
+                <VendorsList />
+              </Card>
+              <Card className="lg:col-span-2">
+                <VendorProductsApproval />
+              </Card>
+            </div>
+            <Card>
+              <VendorsCrud />
+            </Card>
+          </TabsContent>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card><CardHeader><Users className="h-8 w-8 text-primary mb-2" /><CardTitle>Users</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">-</p></CardContent></Card>
-          <Card><CardHeader><Package className="h-8 w-8 text-primary mb-2" /><CardTitle>Products</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">-</p></CardContent></Card>
-          <Card><CardHeader><Store className="h-8 w-8 text-primary mb-2" /><CardTitle>Vendors</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">-</p></CardContent></Card>
-          <Card><CardHeader><Truck className="h-8 w-8 text-primary mb-2" /><CardTitle>Orders</CardTitle></CardHeader><CardContent><p className="text-3xl font-bold">-</p></CardContent></Card>
-        </div>
+          <TabsContent value="delivery" className="space-y-6">
+            <div className="grid lg:grid-cols-3 gap-6">
+              <Card className="lg:col-span-1">
+                <DeliveryApplicationsList />
+              </Card>
+              <Card className="lg:col-span-2">
+                <DeliveryApplicationsActions />
+              </Card>
+            </div>
+            <Card>
+              <DeliveryPartnersCrud />
+            </Card>
+          </TabsContent>
 
-        <div className="grid lg:grid-cols-2 gap-6 mt-8">
-          <Card>
-            <VendorsCrud />
-          </Card>
-          <Card>
-            <DeliveryPartnersCrud />
-          </Card>
-        </div>
+          <TabsContent value="products" className="space-y-6">
+            <Card>
+              <VendorProductsApproval />
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="orders" className="space-y-6">
+            <Card>
+              <OrderManagement />
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
 };
 
 export default AdminDashboard;
+
+const OrderManagement = () => {
+  const { data: orders, isLoading, refetch, error } = useQuery({
+    queryKey: ['admin-orders'],
+    queryFn: async () => {
+      console.log('Fetching orders for admin...');
+      
+      // First try a simple query to get basic order data
+      const { data: basicOrders, error: basicError } = await supabase
+        .from('orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      console.log('Basic orders query result:', { data: basicOrders, error: basicError });
+      
+      if (basicError) {
+        console.error('Basic orders query error:', basicError);
+        throw basicError;
+      }
+      
+      if (!basicOrders || basicOrders.length === 0) {
+        console.log('No orders found');
+        return [];
+      }
+      
+      // Now get related data for each order
+      const ordersWithDetails = await Promise.all(
+        basicOrders.map(async (order) => {
+          // Get user profile
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('id, full_name, phone')
+            .eq('id', order.user_id)
+            .single();
+          
+          // Get address
+          const { data: address, error: addressError } = await supabase
+            .from('addresses')
+            .select('id, label, full_address, city, state, pincode, phone')
+            .eq('id', order.address_id)
+            .single();
+          
+          if (addressError) {
+            console.error('Address query error for order', order.id, ':', addressError);
+          }
+          
+          // Get order items with vendor info
+          const { data: orderItems } = await supabase
+            .from('order_items')
+            .select(`
+              id,
+              quantity,
+              snapshot_name,
+              snapshot_price,
+              products (
+                id,
+                name,
+                vendors (
+                  id,
+                  business_name
+                )
+              )
+            `)
+            .eq('order_id', order.id);
+          
+          return {
+            ...order,
+            profiles: profile,
+            addresses: address,
+            order_items: orderItems || []
+          };
+        })
+      );
+      
+      console.log('Orders with details:', ordersWithDetails);
+      return ordersWithDetails;
+    },
+  });
+
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'text-yellow-600 bg-yellow-100';
+      case 'confirmed': return 'text-blue-600 bg-blue-100';
+      case 'shipped': return 'text-purple-600 bg-purple-100';
+      case 'delivered': return 'text-green-600 bg-green-100';
+      case 'cancelled': return 'text-red-600 bg-red-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  const getPaymentStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'text-yellow-600 bg-yellow-100';
+      case 'paid': return 'text-green-600 bg-green-100';
+      case 'COD': return 'text-blue-600 bg-blue-100';
+      case 'failed': return 'text-red-600 bg-red-100';
+      default: return 'text-gray-600 bg-gray-100';
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <CardContent>
+        <CardHeader className="p-0 mb-4">
+          <CardTitle className="text-xl flex items-center gap-2">
+            <Truck className="h-5 w-5 text-primary" /> Order Management
+          </CardTitle>
+        </CardHeader>
+        <p className="text-sm text-muted-foreground">Loading orders...</p>
+      </CardContent>
+    );
+  }
+
+  if (error) {
+    return (
+      <CardContent>
+        <CardHeader className="p-0 mb-4">
+          <CardTitle className="text-xl flex items-center gap-2">
+            <Truck className="h-5 w-5 text-primary" /> Order Management
+          </CardTitle>
+        </CardHeader>
+        <div className="text-red-600">
+          <p className="font-semibold">Error loading orders:</p>
+          <p className="text-sm">{error.message}</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="mt-2">
+          <RefreshCcw className="h-4 w-4 mr-2" /> Retry
+        </Button>
+      </CardContent>
+    );
+  }
+
+  return (
+    <CardContent>
+      <div className="flex items-center justify-between mb-4">
+        <CardHeader className="p-0">
+          <CardTitle className="text-xl flex items-center gap-2">
+            <Truck className="h-5 w-5 text-primary" /> Order Management
+          </CardTitle>
+        </CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
+        </Button>
+      </div>
+
+      {!orders || orders.length === 0 ? (
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">No orders found</p>
+          <p className="text-xs text-muted-foreground">
+            Debug shows: 1 order exists, but query returned {orders?.length || 0} orders
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {orders.map((order) => (
+            <div key={order.id} className="p-4 border rounded-lg">
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <h3 className="font-semibold">Order #{order.id.slice(-8)}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {new Date(order.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold">₹{order.final_amount?.toFixed(2) || '0.00'}</p>
+                  <div className="flex gap-2 mt-1">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.delivery_status)}`}>
+                      {order.delivery_status}
+                    </span>
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(order.payment_status)}`}>
+                      {order.payment_status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Customer Info */}
+              <div className="grid md:grid-cols-2 gap-4 mb-3">
+                <div>
+                  <h4 className="font-medium text-sm mb-1">Customer</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {order.profiles?.full_name || 'N/A'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {order.profiles?.phone || 'N/A'}
+                  </p>
+                </div>
+                <div>
+                  <h4 className="font-medium text-sm mb-1">Delivery Address</h4>
+                  <p className="text-sm text-muted-foreground">
+                    {order.addresses?.label || 'N/A'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {order.addresses?.full_address || 'N/A'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {order.addresses?.city}, {order.addresses?.state} - {order.addresses?.pincode}
+                  </p>
+                </div>
+              </div>
+
+              {/* Order Items */}
+              <div className="mb-3">
+                <h4 className="font-medium text-sm mb-2">Order Items</h4>
+                <div className="space-y-1">
+                  {order.order_items?.map((item) => (
+                    <div key={item.id} className="flex justify-between text-sm">
+                      <span>
+                        {item.snapshot_name} x {item.quantity}
+                        {item.products?.vendors?.business_name && (
+                          <span className="text-muted-foreground ml-2">
+                            (Vendor: {item.products.vendors.business_name})
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-semibold">
+                        ₹{(item.snapshot_price * item.quantity).toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  );
+};
+
+const StatsCard = ({ title, icon, queryKey }: { title: string; icon: React.ReactNode; queryKey: string }) => {
+  const { data: count, isLoading } = useQuery({
+    queryKey: [queryKey],
+    queryFn: async () => {
+      let result: { count: number | null; error: any } = { count: 0, error: null };
+      
+      switch (queryKey) {
+        case 'admin-users-count':
+          result = await supabase
+            .from('profiles')
+            .select('*', { count: 'exact', head: true });
+          break;
+        case 'admin-products-count':
+          result = await supabase
+            .from('products')
+            .select('*', { count: 'exact', head: true });
+          break;
+        case 'admin-vendors-count':
+          result = await supabase
+            .from('vendors')
+            .select('*', { count: 'exact', head: true });
+          break;
+        case 'admin-orders-count':
+          result = await supabase
+            .from('orders')
+            .select('*', { count: 'exact', head: true });
+          break;
+        case 'admin-delivery-count':
+          result = await supabase
+            .from('delivery_partners')
+            .select('*', { count: 'exact', head: true });
+          break;
+        default:
+          return 0;
+      }
+      
+      if (result.error) throw result.error;
+      return result.count || 0;
+    },
+  });
+
+  return (
+    <Card>
+      <CardContent className="p-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-muted-foreground">{title}</p>
+            <p className="text-2xl font-bold">
+              {isLoading ? '-' : count?.toLocaleString() || 0}
+            </p>
+          </div>
+          <div className="text-muted-foreground">
+            {icon}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
 
 const VendorInviteForm = ({ invitedByUserId }: { invitedByUserId: string | null }) => {
   const queryClient = useQueryClient();
@@ -393,66 +707,16 @@ const DeliveryApplicationsActions = () => {
   });
 
   const queryClient = useQueryClient();
-  const approve: any = useMutation({
+  const approve = useMutation({
     mutationFn: async (app: any) => {
-      // 1) Mark as approved
+      // Simple approach: just mark as approved
+      // The handle_new_user trigger will handle linking when they sign up
       const { error: updErr } = await (supabase as any)
         .from('delivery_applications')
         .update({ status: 'approved' })
         .eq('id', app.id)
         .eq('status', 'pending');
       if (updErr) throw updErr;
-
-      // 2) If a profile already exists with this email, immediately link: create partner and grant role
-      const { data: profile, error: profErr } = await supabase
-        .from('profiles')
-        .select('id')
-        .eq('email', app.email)
-        .maybeSingle();
-      if (profErr) throw profErr;
-
-      if (profile?.id) {
-        // Create delivery_partners if missing
-        const { data: existing, error: existErr } = await supabase
-          .from('delivery_partners')
-          .select('id')
-          .eq('user_id', profile.id)
-          .maybeSingle();
-        if (existErr) throw existErr;
-        if (!existing) {
-          const { error: insErr } = await supabase
-            .from('delivery_partners')
-            .insert({
-              user_id: profile.id,
-              vehicle_type: app.vehicle_type || null,
-              vehicle_number: app.vehicle_number || null,
-              is_verified: true,
-              is_active: true,
-            });
-          if (insErr) throw insErr;
-        }
-
-        // Grant delivery role if missing
-        const { data: roles, error: rolesErr } = await supabase
-          .from('user_roles')
-          .select('role')
-          .eq('user_id', profile.id);
-        if (rolesErr) throw rolesErr;
-        const hasDelivery = (roles || []).some((r) => r.role === 'delivery');
-        if (!hasDelivery) {
-          const { error: roleErr } = await supabase
-            .from('user_roles')
-            .insert({ user_id: profile.id, role: 'delivery' as any });
-          if (roleErr) throw roleErr;
-        }
-
-        // Mark application linked
-        const { error: linkErr } = await (supabase as any)
-          .from('delivery_applications')
-          .update({ status: 'linked', linked_user_id: profile.id })
-          .eq('id', app.id);
-        if (linkErr) throw linkErr;
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery-applications'] });

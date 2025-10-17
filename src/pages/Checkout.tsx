@@ -52,6 +52,9 @@ const Checkout = () => {
       if (!addresses || addresses.length === 0) throw new Error('No address');
 
       const defaultAddress = addresses.find((a: any) => a.is_default) || addresses[0];
+      console.log('Available addresses:', addresses);
+      console.log('Selected address for order:', defaultAddress);
+      
       const orderPayload = {
         user_id: user.id,
         address_id: defaultAddress.id,
