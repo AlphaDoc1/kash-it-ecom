@@ -7,10 +7,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Package, TrendingUp, PlusCircle, Upload, Check, Truck, Download } from 'lucide-react';
+import { Package, TrendingUp, PlusCircle, Upload, Check, Truck, Download, MapPin, X, Trash2 } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { getCurrentPosition } from '@/lib/utils';
 
 const VendorDashboard = () => {
   const { userRoles, user, loading } = useAuth();
@@ -37,6 +38,18 @@ const VendorDashboard = () => {
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold mb-8">Vendor Dashboard</h1>
         <div className="grid md:grid-cols-2 gap-6">
+          <Card className="md:col-span-2">
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <MapPin className="h-8 w-8 text-primary" />
+                <CardTitle>Shop Location</CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <VendorLocationCard userId={user?.id ?? null} />
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -85,6 +98,64 @@ const VendorDashboard = () => {
 };
 
 export default VendorDashboard;
+
+const VendorLocationCard = ({ userId }: { userId: string | null }) => {
+  const queryClient = useQueryClient();
+  const { data: vendor, isLoading } = useQuery({
+    queryKey: ['vendor-location', userId],
+    enabled: !!userId,
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('vendors')
+        .select('id, latitude, longitude')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data as { id: string; latitude: number | null; longitude: number | null } | null;
+    },
+  });
+
+  const setLocation = useMutation({
+    mutationFn: async () => {
+      if (!vendor?.id) throw new Error('Vendor profile not found');
+      const pos = await getCurrentPosition();
+      if (!pos) throw new Error('Unable to get current location');
+      const { error } = await (supabase as any)
+        .from('vendors')
+        .update({ latitude: pos.lat, longitude: pos.lon })
+        .eq('id', vendor.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Shop location updated');
+      queryClient.invalidateQueries({ queryKey: ['vendor-location', userId] });
+      queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to set location'),
+  });
+
+  if (!userId) return <p className="text-sm text-muted-foreground">Sign in to manage location.</p>;
+  if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  if (!vendor) return <p className="text-sm text-muted-foreground">No vendor profile found.</p>;
+
+  const hasLocation = vendor.latitude != null && vendor.longitude != null;
+
+  return (
+    <div className="flex items-center justify-between">
+      <div className="text-sm">
+        <div className="font-medium">Status: {hasLocation ? 'Location set' : 'Not set'}</div>
+        {hasLocation ? (
+          <div className="text-xs text-muted-foreground">Lat: {vendor.latitude} • Lon: {vendor.longitude}</div>
+        ) : (
+          <div className="text-xs text-destructive">Vendor location is required for assignment</div>
+        )}
+      </div>
+      <Button size="sm" onClick={() => setLocation.mutate()} disabled={setLocation.isPending || hasLocation} title={hasLocation ? 'Location already set' : ''}>
+        {hasLocation ? 'Location Set' : 'Use Current Location'}
+      </Button>
+    </div>
+  );
+}
 
 const AddProductForm = ({ userId }: { userId: string | null }) => {
   const queryClient = useQueryClient();
@@ -225,16 +296,16 @@ const AddProductForm = ({ userId }: { userId: string | null }) => {
 
 const VendorOrders = ({ userId }: { userId: string | null }) => {
   const { data: vendor } = useQuery({
-    queryKey: ['vendor-profile', userId],
+    queryKey: ['vendor-location', userId],
     enabled: !!userId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('vendors')
-        .select('id')
+        .select('id, latitude, longitude')
         .eq('user_id', userId)
         .maybeSingle();
       if (error) throw error;
-      return data as { id: string } | null;
+      return data as { id: string; latitude: number | null; longitude: number | null } | null;
     },
   });
 
@@ -318,8 +389,8 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
         })
       );
       
-      // Filter out null results
-      const filtered = ordersWithVendorProducts.filter(order => order !== null);
+      // Filter out null results and cancelled orders
+      const filtered = ordersWithVendorProducts.filter(order => order !== null && order.delivery_status !== 'cancelled');
       
       console.log('Vendor orders with details:', filtered);
       return filtered as Array<{
@@ -337,19 +408,93 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
   });
 
   const queryClient = useQueryClient();
-  const updateStatus = useMutation({
-    mutationFn: async ({ orderId, status }: { orderId: string; status: 'assigned' | 'out_for_delivery' | 'delivered' }) => {
-      const { error } = await supabase
+  useEffect(() => {
+    if (!vendor?.id) return;
+    const channel = supabase
+      .channel(`orders-vendor-${vendor.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor.id] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_requests' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor.id] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [vendor?.id, queryClient]);
+  const [hiddenOrderIds, setHiddenOrderIds] = useState<string[]>([]);
+  const assignNearest = useMutation({
+    mutationFn: async (orderId: string) => {
+      const { error: rpcErr } = await (supabase as any).rpc('assign_nearest_partner', { p_order_id: orderId });
+      if (rpcErr) throw rpcErr;
+      // Reflect status on orders table for UI consistency
+      const { error: orderErr } = await supabase
         .from('orders')
-        .update({ delivery_status: status })
+        .update({ delivery_status: 'assigned' as any })
         .eq('id', orderId);
-      if (error) throw error;
+      if (orderErr) throw orderErr;
+      return { ok: true } as const;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
-      toast.success('Order status updated');
+      toast.success('Assigned to nearest delivery partner');
     },
-    onError: (err: any) => toast.error(err?.message || 'Failed to update order'),
+    onError: (err: any) => {
+      console.error('Assign nearest error:', err);
+      toast.error(err?.message || 'Failed to assign partner');
+    },
+  });
+
+  const rejectOrder = useMutation({
+    mutationFn: async (orderId: string) => {
+      // Update delivery_status to 'rejected_by_vendor' (no delete)
+      const { error } = await supabase
+        .from('orders')
+        .update({ delivery_status: 'rejected_by_vendor' })
+        .eq('id', orderId);
+      if (error) throw error;
+      await (supabase as any)
+        .from('delivery_requests')
+        .delete()
+        .eq('order_id', orderId);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
+      toast.success('Order rejected successfully.');
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to reject order'),
+  });
+
+  const deleteOrder = useMutation({
+    mutationFn: async (orderId: string) => {
+      // Always set cancelled for user, remove any delivery requests
+      await supabase
+        .from('orders')
+        .update({ delivery_status: 'cancelled' as any })
+        .eq('id', orderId);
+      await (supabase as any)
+        .from('delivery_requests')
+        .delete()
+        .eq('order_id', orderId);
+      // Then, permanently remove order for both parties
+      setTimeout(async () => {
+        await supabase.from('orders').delete().eq('id', orderId);
+      }, 750);
+    },
+    onSuccess: (_, orderId) => {
+      toast.success('Order deleted successfully');
+      setHiddenOrderIds((prev) => [...prev, orderId as string]);
+      queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
+    },
+    onError: async (e: any, orderId) => {
+      try {
+        await supabase.from('orders').delete().eq('id', orderId as string);
+        setHiddenOrderIds((prev) => [...prev, orderId as string]);
+        toast.success('Order deleted successfully');
+        queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
+      } catch (err: any) {
+        toast.error(e?.message || 'Failed to delete order');
+      }
+    },
   });
 
   const testVendorAccess = useMutation({
@@ -523,7 +668,7 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
           Test Access
         </Button>
       </div>
-      {orders.map((o) => (
+      {orders.filter((o) => !hiddenOrderIds.includes(o.id)).map((o) => (
         <div key={o.id} className="p-4 border rounded-md">
           <div className="flex items-center justify-between mb-3">
             <div>
@@ -575,11 +720,20 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
               <Button size="sm" variant="outline" onClick={() => downloadReceipt(o)}>
                 <Download className="h-4 w-4 mr-1" /> Download Receipt
               </Button>
-              <Button size="sm" variant="outline" onClick={() => updateStatus.mutate({ orderId: o.id, status: 'assigned' })}>
-                <Check className="h-4 w-4 mr-1" /> Approve
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => assignNearest.mutate(o.id)}
+                disabled={assignNearest.isPending || vendor?.latitude == null || vendor?.longitude == null}
+                title={vendor?.latitude == null || vendor?.longitude == null ? 'Set shop location first' : ''}
+              >
+                <Check className="h-4 w-4 mr-1" /> {assignNearest.isPending ? 'Assigning…' : 'Approve & Assign'}
               </Button>
-              <Button size="sm" onClick={() => updateStatus.mutate({ orderId: o.id, status: 'out_for_delivery' })}>
-                <Truck className="h-4 w-4 mr-1" /> Mark Shipped
+              <Button size="sm" variant="destructive" onClick={() => rejectOrder.mutate(o.id)} disabled={rejectOrder.isPending}>
+                <X className="h-4 w-4 mr-1" /> Reject
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => deleteOrder.mutate(o.id)} disabled={deleteOrder.isPending}>
+                <Trash2 className="h-4 w-4 mr-1" /> Delete
               </Button>
             </div>
           </div>

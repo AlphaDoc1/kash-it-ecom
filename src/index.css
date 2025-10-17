@@ -6,6 +6,9 @@
 All colors MUST be HSL.
 */
 
+/* Leaflet CSS (maps) */
+@import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+
 @layer base {
   :root {
     /* E-commerce teal & orange theme */

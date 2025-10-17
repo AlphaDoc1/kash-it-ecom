@@ -97,6 +97,12 @@ const AdminDashboard = () => {
             <Card>
               <OrderManagement />
             </Card>
+            <Card>
+              <DeliveryRequestsAdmin />
+            </Card>
+            <Card>
+              <RejectedOrdersAdmin />
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
@@ -336,6 +342,94 @@ const OrderManagement = () => {
     </CardContent>
   );
 };
+
+const RejectedOrdersAdmin = () => {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['admin-rejected-orders'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('delivery_status', 'cancelled')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+
+  return (
+    <CardContent>
+      <div className="flex items-center justify-between mb-4">
+        <CardHeader className="p-0">
+          <CardTitle className="text-xl">Rejected/Deleted Orders</CardTitle>
+        </CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
+        </Button>
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : !data || data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No rejected or deleted orders.</p>
+      ) : (
+        <div className="space-y-2">
+          {data.map((o) => (
+            <div key={o.id} className="p-3 border rounded text-sm flex items-center justify-between">
+              <div>
+                <div className="font-medium">#{o.id.slice(0,8)}</div>
+                <div className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleString()} • Cancelled</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  );
+}
+
+const DeliveryRequestsAdmin = () => {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['admin-delivery-requests'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('delivery_requests')
+        .select('id, order_id, status, assigned_partner_id, vendor_id, user_id, created_at, updated_at')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+
+  return (
+    <CardContent>
+      <div className="flex items-center justify-between mb-4">
+        <CardHeader className="p-0">
+          <CardTitle className="text-xl flex items-center gap-2"><Truck className="h-5 w-5 text-primary" /> Delivery Requests</CardTitle>
+        </CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
+          <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
+        </Button>
+      </div>
+      {isLoading ? (
+        <p className="text-sm text-muted-foreground">Loading…</p>
+      ) : !data || data.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No delivery requests.</p>
+      ) : (
+        <div className="space-y-2">
+          {data.map((r) => (
+            <div key={r.id} className="p-3 border rounded text-sm flex items-center justify-between">
+              <div>
+                <div className="font-medium">#{r.order_id?.slice(0,8)}</div>
+                <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()} • {r.status}</div>
+              </div>
+              <div className="text-xs text-muted-foreground">Partner: {r.assigned_partner_id ? r.assigned_partner_id.slice(0,8) : '-'}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </CardContent>
+  );
+}
 
 const StatsCard = ({ title, icon, queryKey }: { title: string; icon: React.ReactNode; queryKey: string }) => {
   const { data: count, isLoading } = useQuery({

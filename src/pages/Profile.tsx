@@ -7,7 +7,7 @@ import { Navbar } from '@/components/Navbar';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { User, Edit, Save, X } from 'lucide-react';
+import { User, Edit, Save, X, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Profile = () => {
@@ -229,6 +229,17 @@ const Profile = () => {
 
           <Card>
             <CardHeader>
+              <div className="flex items-center gap-2"><MapPin className="h-5 w-5 text-primary" /><CardTitle>My Location</CardTitle></div>
+            </CardHeader>
+            <CardContent>
+              <UserLocationSection userId={user.id} />
+            </CardContent>
+          </Card>
+
+          <div className="h-6" />
+
+          <Card>
+            <CardHeader>
               <CardTitle>Delivery Addresses</CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
@@ -300,3 +311,81 @@ const Profile = () => {
 };
 
 export default Profile;
+
+const UserLocationSection = ({ userId }: { userId: string }) => {
+  const queryClient = useQueryClient();
+  const { data: userProfile, isLoading } = useQuery({
+    queryKey: ['profile-location', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, latitude, longitude')
+        .eq('id', userId)
+        .single();
+      if (error) throw error;
+      return data as { id: string; latitude: number | null; longitude: number | null };
+    }
+  });
+
+  const setLocation = useMutation({
+    mutationFn: async () => {
+      const pos = await (await import('@/lib/utils')).getCurrentPosition();
+      if (!pos) throw new Error('Unable to get current location');
+      const { error } = await supabase
+        .from('profiles')
+        .update({ latitude: pos.lat, longitude: pos.lon } as any)
+        .eq('id', userId);
+      if (error) throw error;
+      // Also mirror coordinates into the user's default (or latest) address for routing
+      const { data: defAddr } = await supabase
+        .from('addresses')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('is_default', true)
+        .limit(1)
+        .maybeSingle();
+      let addressId = defAddr?.id as string | undefined;
+      if (!addressId) {
+        const { data: latest } = await supabase
+          .from('addresses')
+          .select('id')
+          .eq('user_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        addressId = latest?.id as string | undefined;
+      }
+      if (addressId) {
+        await (supabase as any)
+          .from('addresses')
+          .update({ latitude: pos.lat, longitude: pos.lon })
+          .eq('id', addressId);
+      }
+    },
+    onSuccess: () => {
+      toast.success('Location saved');
+      queryClient.invalidateQueries({ queryKey: ['profile-location', userId] });
+      queryClient.invalidateQueries({ queryKey: ['addresses', userId] });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to save location'),
+  });
+
+  if (isLoading || !userProfile) return <p className="text-sm text-muted-foreground">Loading…</p>;
+  const hasLoc = userProfile.latitude != null && userProfile.longitude != null;
+
+  return (
+    <div className="flex items-center justify-between">
+      <div className="text-sm">
+        <div className="font-medium">Status: {hasLoc ? 'Location set' : 'Not set'}</div>
+        {hasLoc ? (
+          <div className="text-xs text-muted-foreground">Lat: {userProfile.latitude} • Lon: {userProfile.longitude}</div>
+        ) : (
+          <div className="text-xs text-muted-foreground">Set your current GPS for accurate delivery</div>
+        )}
+      </div>
+      <Button size="sm" onClick={() => setLocation.mutate()} disabled={setLocation.isPending || hasLoc} title={hasLoc ? 'Location already set' : ''}>
+        {hasLoc ? 'Location Set' : 'Use Current Location'}
+      </Button>
+    </div>
+  );
+}
