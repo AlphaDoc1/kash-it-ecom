@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Package, TrendingUp, PlusCircle, Upload, Check, Truck, Download, MapPin, X, Trash2 } from 'lucide-react';
+import { Package, TrendingUp, PlusCircle, Upload, Check, Truck, Download, MapPin, X, Trash2, Images } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -33,17 +33,19 @@ const VendorDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold mb-8">Vendor Dashboard</h1>
+      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
+        <div className="mb-4 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold">Vendor Dashboard</h1>
+        </div>
         <VendorSectionNav activeSection={activeSection} onChange={setActiveSection} />
-        <div className="h-4" />
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="h-2 sm:h-4" />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
           {activeSection === 'vendor-location' && (
-          <Card id="vendor-location" className="md:col-span-2">
+          <Card id="vendor-location" className="lg:col-span-2">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <MapPin className="h-8 w-8 text-primary" />
-                <CardTitle>Shop Location</CardTitle>
+                <MapPin className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+                <CardTitle className="text-lg sm:text-xl">Shop Location</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
@@ -53,12 +55,12 @@ const VendorDashboard = () => {
           )}
 
           {activeSection === 'vendor-products' && (
-          <Card id="vendor-products">
+          <Card id="vendor-products" className="lg:col-span-2">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Package className="h-8 w-8 text-primary" />
-                  <CardTitle>My Products</CardTitle>
+                  <Package className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+                  <CardTitle className="text-lg sm:text-xl">My Products</CardTitle>
                 </div>
               </div>
             </CardHeader>
@@ -69,11 +71,11 @@ const VendorDashboard = () => {
           )}
 
           {activeSection === 'vendor-add-product' && (
-          <Card id="vendor-add-product">
+          <Card id="vendor-add-product" className="lg:col-span-2">
             <CardHeader>
               <div className="flex items-center gap-2">
-                <PlusCircle className="h-8 w-8 text-primary" />
-                <CardTitle>Add New Product</CardTitle>
+                <PlusCircle className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+                <CardTitle className="text-lg sm:text-xl">Add New Product</CardTitle>
               </div>
             </CardHeader>
             <CardContent>
@@ -83,18 +85,26 @@ const VendorDashboard = () => {
           )}
 
           {activeSection === 'vendor-stats' && (
-          <Card id="vendor-stats" className="md:col-span-2">
+          <Card id="vendor-stats" className="lg:col-span-2">
             <CardHeader>
-              <div className="flex items-center gap-2"><TrendingUp className="h-8 w-8 text-primary" /><CardTitle>Stats</CardTitle></div>
+              <div className="flex items-center gap-2">
+                <TrendingUp className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+                <CardTitle className="text-lg sm:text-xl">Stats</CardTitle>
+              </div>
             </CardHeader>
-            <CardContent><p className="text-3xl font-bold">₹0</p></CardContent>
+            <CardContent>
+              <p className="text-2xl sm:text-3xl font-bold">₹0</p>
+            </CardContent>
           </Card>
           )}
 
           {activeSection === 'vendor-orders' && (
-          <Card id="vendor-orders" className="md:col-span-2">
+          <Card id="vendor-orders" className="lg:col-span-2">
             <CardHeader>
-              <div className="flex items-center gap-2"><Truck className="h-8 w-8 text-primary" /><CardTitle>Orders</CardTitle></div>
+              <div className="flex items-center gap-2">
+                <Truck className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+                <CardTitle className="text-lg sm:text-xl">Orders</CardTitle>
+              </div>
             </CardHeader>
             <CardContent>
               <VendorOrders userId={user?.id ?? null} view="live" />
@@ -103,9 +113,12 @@ const VendorDashboard = () => {
           )}
 
           {activeSection === 'vendor-orders-history' && (
-          <Card id="vendor-orders-history" className="md:col-span-2">
+          <Card id="vendor-orders-history" className="lg:col-span-2">
             <CardHeader>
-              <div className="flex items-center gap-2"><Truck className="h-8 w-8 text-primary" /><CardTitle>Order History</CardTitle></div>
+              <div className="flex items-center gap-2">
+                <Truck className="h-6 w-6 sm:h-8 sm:w-8 text-primary" />
+                <CardTitle className="text-lg sm:text-xl">Order History</CardTitle>
+              </div>
             </CardHeader>
             <CardContent>
               <VendorOrders userId={user?.id ?? null} view="history" />
@@ -122,27 +135,32 @@ export default VendorDashboard;
 
 const VendorSectionNav = ({ activeSection, onChange }: { activeSection: string; onChange: (id: string) => void }) => {
   const sections = [
-    { id: 'vendor-location', label: 'Location' },
-    { id: 'vendor-products', label: 'My Products' },
-    { id: 'vendor-add-product', label: 'Add Product' },
-    { id: 'vendor-orders', label: 'Orders' },
-    { id: 'vendor-orders-history', label: 'Order History' },
-    { id: 'vendor-stats', label: 'Stats' },
+    { id: 'vendor-location', label: 'Location', icon: MapPin },
+    { id: 'vendor-products', label: 'Products', icon: Package },
+    { id: 'vendor-add-product', label: 'Add', icon: PlusCircle },
+    { id: 'vendor-orders', label: 'Orders', icon: Truck },
+    { id: 'vendor-orders-history', label: 'History', icon: Truck },
+    { id: 'vendor-stats', label: 'Stats', icon: TrendingUp },
   ];
   return (
-    <div className="sticky top-16 z-40">
-      <div className="rounded-xl border bg-card shadow-sm px-3 py-2">
-        <div className="flex flex-wrap gap-2">
-          {sections.map((s) => (
-            <Button
-              key={s.id}
-              variant={activeSection === s.id ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => onChange(s.id)}
-            >
-              {s.label}
-            </Button>
-          ))}
+    <div className="sticky top-16 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="rounded-xl border bg-card shadow-sm p-2 sm:p-3">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-1 sm:gap-2">
+          {sections.map((s) => {
+            const Icon = s.icon;
+            return (
+              <Button
+                key={s.id}
+                variant={activeSection === s.id ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => onChange(s.id)}
+                className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm px-2 sm:px-3 py-2 h-auto"
+              >
+                <Icon className="h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden xs:inline sm:inline">{s.label}</span>
+              </Button>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -191,18 +209,26 @@ const VendorLocationCard = ({ userId }: { userId: string | null }) => {
   const hasLocation = vendor.latitude != null && vendor.longitude != null;
 
   return (
-    <div className="flex items-center justify-between">
-      <div className="text-sm">
-        <div className="font-medium">Status: {hasLocation ? 'Location set' : 'Not set'}</div>
-        {hasLocation ? (
-          <div className="text-xs text-muted-foreground">Lat: {vendor.latitude} • Lon: {vendor.longitude}</div>
-        ) : (
-          <div className="text-xs text-destructive">Vendor location is required for assignment</div>
-        )}
+    <div className="space-y-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+        <div className="text-sm">
+          <div className="font-medium">Status: {hasLocation ? 'Location set' : 'Not set'}</div>
+          {hasLocation ? (
+            <div className="text-xs text-muted-foreground break-all">Lat: {vendor.latitude} • Lon: {vendor.longitude}</div>
+          ) : (
+            <div className="text-xs text-destructive">Vendor location is required for assignment</div>
+          )}
+        </div>
+        <Button 
+          size="sm" 
+          onClick={() => setLocation.mutate()} 
+          disabled={setLocation.isPending || hasLocation} 
+          title={hasLocation ? 'Location already set' : ''}
+          className="w-full sm:w-auto"
+        >
+          {hasLocation ? 'Location Set' : 'Use Current Location'}
+        </Button>
       </div>
-      <Button size="sm" onClick={() => setLocation.mutate()} disabled={setLocation.isPending || hasLocation} title={hasLocation ? 'Location already set' : ''}>
-        {hasLocation ? 'Location Set' : 'Use Current Location'}
-      </Button>
     </div>
   );
 }
@@ -772,13 +798,14 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-4">
         <h3 className="text-lg font-semibold">Orders with Your Products</h3>
         <Button 
           variant="outline" 
           size="sm" 
           onClick={() => testVendorAccess.mutate()}
           disabled={testVendorAccess.isPending}
+          className="w-full sm:w-auto"
         >
           Test Access
         </Button>
@@ -787,17 +814,17 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
         const effectiveStatus = ((o as any).delivery_requests?.status || o.delivery_status) as string | null;
         const delivered = effectiveStatus === 'delivered';
         return (
-        <div key={o.id} className={`p-4 border rounded-md ${delivered ? 'border-green-500 bg-green-50' : ''}`}>
-          <div className="flex items-center justify-between mb-3">
+        <div key={o.id} className={`p-3 sm:p-4 border rounded-md ${delivered ? 'border-green-500 bg-green-50' : ''}`}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
             <div>
-              <div className="font-semibold">Order #{o.id.slice(0, 8)}</div>
+              <div className="font-semibold text-sm sm:text-base">Order #{o.id.slice(0, 8)}</div>
               <div className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleString()}</div>
             </div>
-            <div className="text-sm">Status: <span className={`uppercase ${delivered ? 'text-green-700' : ''}`}>{STATUS_LABEL[(effectiveStatus || 'pending') as any] || (effectiveStatus || 'pending')}</span></div>
+            <div className="text-xs sm:text-sm">Status: <span className={`uppercase ${delivered ? 'text-green-700' : ''}`}>{STATUS_LABEL[(effectiveStatus || 'pending') as any] || (effectiveStatus || 'pending')}</span></div>
           </div>
 
           {/* Customer Info */}
-          <div className="grid md:grid-cols-2 gap-4 mb-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3">
             <div>
               <h4 className="font-medium text-sm mb-1">Customer</h4>
               <p className="text-sm text-muted-foreground">
@@ -812,7 +839,7 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
               <p className="text-sm text-muted-foreground">
                 {o.addresses?.label || 'N/A'}
               </p>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground break-words">
                 {o.addresses?.full_address || 'N/A'}
               </p>
               <p className="text-sm text-muted-foreground">
@@ -826,17 +853,24 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
             <h4 className="font-medium text-sm mb-1">Order Items</h4>
             {o.order_items.map((oi) => (
               <div key={oi.id} className="flex justify-between text-sm">
-                <span>{oi.snapshot_name} × {oi.quantity}</span>
-                <span>₹{(oi.snapshot_price * oi.quantity).toFixed(2)}</span>
+                <span className="break-words">{oi.snapshot_name} × {oi.quantity}</span>
+                <span className="whitespace-nowrap">₹{(oi.snapshot_price * oi.quantity).toFixed(2)}</span>
               </div>
             ))}
           </div>
 
-          <div className="flex items-center justify-between">
-            <div className="font-bold">Total: ₹{o.final_amount}</div>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => downloadReceipt(o)} className={delivered ? 'border-green-600 text-green-700' : ''}>
-                <Download className="h-4 w-4 mr-1" /> Download Receipt
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="font-bold text-sm sm:text-base">Total: ₹{o.final_amount}</div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => downloadReceipt(o)} 
+                className={`w-full sm:w-auto ${delivered ? 'border-green-600 text-green-700' : ''}`}
+              >
+                <Download className="h-4 w-4 mr-1" /> 
+                <span className="hidden xs:inline">Download Receipt</span>
+                <span className="xs:hidden">Receipt</span>
               </Button>
               {view === 'live' && !delivered && (
               <Button
@@ -856,6 +890,7 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
                     ? 'Awaiting partner response'
                     : ''
                 }
+                className="w-full sm:w-auto"
               >
                 <Check className="h-4 w-4 mr-1" />
                 {
@@ -874,12 +909,24 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
               </Button>
               )}
               {view === 'live' && !delivered && (
-              <Button size="sm" variant="destructive" onClick={() => rejectOrder.mutate(o.id)} disabled={rejectOrder.isPending}>
+              <Button 
+                size="sm" 
+                variant="destructive" 
+                onClick={() => rejectOrder.mutate(o.id)} 
+                disabled={rejectOrder.isPending}
+                className="w-full sm:w-auto"
+              >
                 <X className="h-4 w-4 mr-1" /> Reject
               </Button>
               )}
               {view === 'history' && (
-                <Button size="sm" variant="outline" onClick={() => deleteOrder.mutate(o.id)} disabled={deleteOrder.isPending}>
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={() => deleteOrder.mutate(o.id)} 
+                  disabled={deleteOrder.isPending}
+                  className="w-full sm:w-auto"
+                >
                   <Trash2 className="h-4 w-4 mr-1" /> Delete
                 </Button>
               )}
@@ -893,6 +940,7 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
 };
 
 const VendorProductsList = ({ userId }: { userId: string | null }) => {
+  const queryClient = useQueryClient();
   const { data: vendor } = useQuery({
     queryKey: ['vendor-profile', userId],
     enabled: !!userId,
@@ -915,10 +963,32 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
         .from('products')
         .select('id, name, price, stock, unit, is_approved, image_url')
         .eq('vendor_id', vendor!.id)
+        .eq('is_active', true)
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as Array<{ id: string; name: string; price: number; stock: number; unit: string | null; is_approved: boolean | null; image_url: string | null }>;
     },
+  });
+
+  const deleteProduct = useMutation({
+    mutationFn: async (productId: string) => {
+      // Soft-delete: mark inactive so it disappears from the storefront immediately
+      const { error } = await supabase
+        .from('products')
+        .update({ is_active: false as any })
+        .eq('id', productId)
+        .eq('vendor_id', vendor!.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('Product removed from storefront');
+      queryClient.invalidateQueries({ queryKey: ['vendor-products', vendor?.id] });
+      // Also refresh public product lists
+      queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && (
+        String(q.queryKey[0]).includes('products') || q.queryKey[0] === 'featured-products'
+      ) });
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to delete product'),
   });
 
   if (!vendor?.id) return <p className="text-sm text-muted-foreground">Vendor profile not found.</p>;
@@ -926,19 +996,19 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
   if (!products || products.length === 0) return <p className="text-sm text-muted-foreground">No products yet.</p>;
 
   return (
-    <div className="grid sm:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
       {products.map((p) => (
-        <div key={p.id} className="p-4 border rounded-md flex gap-3 items-center">
-          <div className="w-16 h-16 bg-muted rounded overflow-hidden flex items-center justify-center">
+        <div key={p.id} className="p-3 sm:p-4 border rounded-md flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          <div className="w-16 h-16 bg-muted rounded overflow-hidden flex items-center justify-center flex-shrink-0">
             {p.image_url ? (
               <img src={p.image_url} alt={p.name} className="object-cover w-full h-full" />
             ) : (
               <Package className="h-6 w-6 text-muted-foreground" />
             )}
           </div>
-          <div className="flex-1">
-            <div className="font-semibold">
-              {p.name}
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm sm:text-base">
+              <span className="break-words">{p.name}</span>
               {p.is_approved ? (
                 <span className="ml-2 text-xs text-green-600">Approved</span>
               ) : (
@@ -947,8 +1017,134 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
             </div>
             <div className="text-sm text-muted-foreground">₹{p.price} • Stock {p.stock}{p.unit ? ` ${p.unit}` : ''}</div>
           </div>
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <ManageProductPhotosButton productId={p.id} />
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => {
+                if (confirm('Remove this product from the storefront?')) deleteProduct.mutate(p.id);
+              }}
+              title="Remove product from storefront"
+              className="flex-1 sm:flex-none"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       ))}
+    </div>
+  );
+};
+
+const ManageProductPhotosButton = ({ productId }: { productId: string }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)} title="Manage photos">
+        <Images className="h-4 w-4 mr-1" /> Photos
+      </Button>
+      {open && <ManageProductPhotosDialog productId={productId} onClose={() => setOpen(false)} />}
+    </>
+  );
+};
+
+const ManageProductPhotosDialog = ({ productId, onClose }: { productId: string; onClose: () => void }) => {
+  const [files, setFiles] = useState<FileList | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [items, setItems] = useState<Array<{ name: string; publicUrl: string }>>([]);
+
+  const fetchList = async () => {
+    try {
+      const { data, error } = await supabase.storage.from('product-images').list(productId, { sortBy: { column: 'created_at', order: 'desc' } });
+      if (error) throw error;
+      const mapped = (data || []).filter((i: any) => i.name !== '.empty').map((i: any) => {
+        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(`${productId}/${i.name}`);
+        return { name: i.name, publicUrl: urlData.publicUrl };
+      });
+      setItems(mapped);
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to load photos');
+    }
+  };
+
+  useEffect(() => { fetchList(); }, []);
+
+  const onUpload = async () => {
+    if (!files || files.length === 0) return;
+    setIsUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const ext = file.name.split('.').pop();
+        const path = `${productId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: false, cacheControl: '3600' });
+        if (error) throw error;
+      }
+      toast.success('Photos uploaded');
+      setFiles(null);
+      await fetchList();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to upload');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const onDelete = async (name: string) => {
+    try {
+      const { error } = await supabase.storage.from('product-images').remove([`${productId}/${name}`]);
+      if (error) throw error;
+      toast.success('Photo deleted');
+      await fetchList();
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to delete photo');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-background w-full max-w-lg rounded-md p-4 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <div className="font-semibold text-sm sm:text-base">Manage Photos</div>
+          <Button size="sm" variant="outline" onClick={onClose} className="text-xs sm:text-sm">Close</Button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <input 
+              type="file" 
+              multiple 
+              accept="image/*" 
+              onChange={(e) => setFiles(e.target.files)} 
+              className="w-full text-xs sm:text-sm"
+            />
+            <div className="mt-2">
+              <Button 
+                size="sm" 
+                onClick={onUpload} 
+                disabled={isUploading || !files || files.length === 0}
+                className="w-full sm:w-auto"
+              >
+                {isUploading ? 'Uploading…' : 'Upload'}
+              </Button>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 max-h-60 sm:max-h-80 overflow-auto">
+            {items.map((it) => (
+              <div key={it.name} className="relative border rounded overflow-hidden">
+                <img src={it.publicUrl} alt={it.name} className="object-cover w-full h-20 sm:h-28" />
+                <div className="absolute top-1 right-1">
+                  <Button variant="destructive" size="icon" onClick={() => onDelete(it.name)} className="h-6 w-6">
+                    <Trash2 className="h-3 w-3" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {items.length === 0 && (
+              <div className="col-span-2 sm:col-span-3 text-xs sm:text-sm text-muted-foreground text-center py-4">No photos yet. Upload images to showcase the product.</div>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

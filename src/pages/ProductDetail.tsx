@@ -7,9 +7,10 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from '@/components/ui/carousel';
 import { ShoppingBag, ShoppingCart, Store, Package } from 'lucide-react';
 import { toast } from 'sonner';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -17,6 +18,8 @@ const ProductDetail = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [quantity, setQuantity] = useState(1);
+  const [gallery, setGallery] = useState<Array<string> | null>(null);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   const { data: product, isLoading } = useQuery({
     queryKey: ['product', id],
@@ -33,6 +36,46 @@ const ProductDetail = () => {
       return data;
     },
   });
+
+  // Load product gallery images
+  useEffect(() => {
+    if (!product?.id) return;
+    
+    let isMounted = true;
+    const loadGallery = async () => {
+      try {
+        const { data, error } = await supabase.storage
+          .from('product-images')
+          .list(product.id, { sortBy: { column: 'created_at', order: 'asc' } });
+        
+        if (error) throw error;
+        
+        const images = (data || [])
+          .filter((item: any) => item.name !== '.empty')
+          .map((item: any) => 
+            supabase.storage
+              .from('product-images')
+              .getPublicUrl(`${product.id}/${item.name}`)
+              .data.publicUrl
+          );
+        
+        if (isMounted) setGallery(images);
+      } catch (error) {
+        console.error('Error loading gallery:', error);
+        if (isMounted) setGallery(null);
+      }
+    };
+    
+    loadGallery();
+    return () => { isMounted = false; };
+  }, [product?.id]);
+
+  // Set the first image as selected when gallery loads
+  useEffect(() => {
+    if (gallery && gallery.length > 0 && !selectedImage) {
+      setSelectedImage(gallery[0]);
+    }
+  }, [gallery, selectedImage]);
 
   const addToCartMutation = useMutation({
     mutationFn: async () => {
@@ -106,15 +149,44 @@ const ProductDetail = () => {
       <div className="container mx-auto px-4 py-8">
         <div className="grid md:grid-cols-2 gap-8">
           {/* Product Image */}
-          <Card className="overflow-hidden">
-            <div className="aspect-square bg-gradient-card flex items-center justify-center">
-              {product.image_url ? (
-                <img src={product.image_url} alt={product.name} className="object-cover w-full h-full" />
-              ) : (
-                <ShoppingBag className="h-48 w-48 text-muted-foreground/50" />
-              )}
-            </div>
-          </Card>
+          <div className="space-y-4">
+            <Card className="overflow-hidden">
+              <div className="aspect-square bg-gradient-card flex items-center justify-center">
+                {selectedImage || product.image_url ? (
+                  <img 
+                    src={selectedImage || product.image_url} 
+                    alt={product.name} 
+                    className="object-cover w-full h-full" 
+                  />
+                ) : (
+                  <ShoppingBag className="h-48 w-48 text-muted-foreground/50" />
+                )}
+              </div>
+            </Card>
+            
+            {/* Thumbnail images */}
+            {gallery && gallery.length > 1 && (
+              <div className="flex gap-2 overflow-x-auto p-2 bg-muted/30 rounded-lg">
+                {gallery.map((src, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setSelectedImage(src)}
+                    className={`flex-shrink-0 w-16 h-16 rounded border-2 transition-all ${
+                      selectedImage === src 
+                        ? 'border-primary ring-2 ring-primary/20' 
+                        : 'border-muted hover:border-primary/50'
+                    }`}
+                  >
+                    <img 
+                      src={src} 
+                      alt={`${product.name} angle ${idx + 1}`} 
+                      className="w-full h-full object-cover rounded"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Product Info */}
           <div className="space-y-6">

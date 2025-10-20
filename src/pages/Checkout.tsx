@@ -124,78 +124,78 @@ const Checkout = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold mb-8">Checkout</h1>
+      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 md:py-8">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6 md:mb-8">Checkout</h1>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
-            <Card className="p-6">
-              <h2 className="text-2xl font-bold mb-4">Delivery Address</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
+            <Card className="p-3 sm:p-4 md:p-6">
+              <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4">Delivery Address</h2>
               {addresses && addresses.length > 0 ? (
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {addresses.map((addr) => (
-                    <div key={addr.id} className="p-4 border rounded-lg">
-                      <p className="font-semibold">{addr.label}</p>
-                      <p className="text-sm text-muted-foreground">{addr.full_address}</p>
-                      <p className="text-sm text-muted-foreground">{addr.city}, {addr.state} - {addr.pincode}</p>
-                      <p className="text-sm text-muted-foreground">Phone: {addr.phone}</p>
+                    <div key={addr.id} className="p-3 sm:p-4 border rounded-lg">
+                      <p className="font-semibold text-sm sm:text-base">{addr.label}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground break-words">{addr.full_address}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">{addr.city}, {addr.state} - {addr.pincode}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Phone: {addr.phone}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="text-center py-6">
-                  <p className="text-muted-foreground mb-4">No delivery address found</p>
-                  <Button onClick={() => navigate('/profile')}>Add Address</Button>
+                <div className="text-center py-4 sm:py-6">
+                  <p className="text-muted-foreground mb-3 sm:mb-4 text-sm sm:text-base">No delivery address found</p>
+                  <Button onClick={() => navigate('/profile')} className="w-full sm:w-auto">Add Address</Button>
                 </div>
               )}
             </Card>
 
-            <Card className="p-6">
-              <h2 className="text-2xl font-bold mb-4">Order Items</h2>
-              <div className="space-y-3">
+            <Card className="p-3 sm:p-4 md:p-6">
+              <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4">Order Items</h2>
+              <div className="space-y-2 sm:space-y-3">
                 {cartItems?.map((item) => (
-                  <div key={item.id} className="flex items-center gap-4 p-3 border rounded-lg">
-                    <Package className="h-8 w-8 text-muted-foreground" />
-                    <div className="flex-1">
-                      <p className="font-semibold">{item.products.name}</p>
-                      <p className="text-sm text-muted-foreground">Quantity: {item.quantity}</p>
+                  <div key={item.id} className="flex items-center gap-2 sm:gap-4 p-2 sm:p-3 border rounded-lg">
+                    <Package className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm sm:text-base break-words">{item.products.name}</p>
+                      <p className="text-xs sm:text-sm text-muted-foreground">Quantity: {item.quantity}</p>
                     </div>
-                    <span className="font-bold">₹{(item.products.price * item.quantity).toFixed(2)}</span>
+                    <span className="font-bold text-sm sm:text-base whitespace-nowrap">₹{(item.products.price * item.quantity).toFixed(2)}</span>
                   </div>
                 ))}
               </div>
             </Card>
           </div>
 
-          <div>
-            <Card className="p-6 sticky top-20">
-              <h2 className="text-2xl font-bold mb-4">Payment Summary</h2>
+          <div className="lg:order-last">
+            <Card className="p-3 sm:p-4 md:p-6 sticky top-20">
+              <h2 className="text-lg sm:text-xl md:text-2xl font-bold mb-3 sm:mb-4">Payment Summary</h2>
               
-              <div className="space-y-2 mb-4">
-                <div className="flex justify-between">
+              <div className="space-y-2 mb-3 sm:mb-4">
+                <div className="flex justify-between text-sm sm:text-base">
                   <span className="text-muted-foreground">Subtotal</span>
                   <span className="font-semibold">₹{subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-sm sm:text-base">
                   <span className="text-muted-foreground">Delivery Fee</span>
                   <span className="font-semibold">₹0.00</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-sm sm:text-base">
                   <span className="text-muted-foreground">Tax</span>
                   <span className="font-semibold">₹0.00</span>
                 </div>
               </div>
 
-              <div className="border-t pt-4 mb-4">
-                <div className="flex justify-between text-lg font-bold">
+              <div className="border-t pt-3 sm:pt-4 mb-3 sm:mb-4">
+                <div className="flex justify-between text-base sm:text-lg font-bold">
                   <span>Total</span>
                   <span className="text-primary">₹{subtotal.toFixed(2)}</span>
                 </div>
               </div>
 
-              <div className="space-y-3 mb-6">
-                <h3 className="font-semibold">Payment Method</h3>
-                <label className="flex items-center gap-2 text-sm">
+              <div className="space-y-2 sm:space-y-3 mb-4 sm:mb-6">
+                <h3 className="font-semibold text-sm sm:text-base">Payment Method</h3>
+                <label className="flex items-center gap-2 text-xs sm:text-sm">
                   <input
                     type="radio"
                     name="payment"
@@ -204,7 +204,7 @@ const Checkout = () => {
                   />
                   Cash on Delivery (COD)
                 </label>
-                <label className="flex items-center gap-2 text-sm">
+                <label className="flex items-center gap-2 text-xs sm:text-sm">
                   <input
                     type="radio"
                     name="payment"
@@ -215,7 +215,7 @@ const Checkout = () => {
                 </label>
               </div>
 
-              <Button size="lg" className="w-full" onClick={handlePlaceOrder}>
+              <Button size="lg" className="w-full text-sm sm:text-base" onClick={handlePlaceOrder}>
                 {paymentMethod === 'cod' ? (placeCodOrder.isPending ? 'Placing…' : 'Place Order (COD)') : 'Place Order (Online)'}
               </Button>
             </Card>
