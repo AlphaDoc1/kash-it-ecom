@@ -1,18 +1,14 @@
-# Welcome to your Lovable project
+# Kash.it E‑Commerce
 
 ## Project info
 
-**URL**: https://lovable.dev/projects/7f1693bf-a761-432a-94f5-65fb618c4cfa
+Kash.it storefront built with Vite, React, TypeScript, Tailwind, shadcn/ui, and Supabase.
 
 ## How can I edit this code?
 
 There are several ways of editing your application.
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/7f1693bf-a761-432a-94f5-65fb618c4cfa) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
+Local development
 
 **Use your preferred IDE**
 
@@ -50,24 +46,12 @@ npm run dev
 - Click on "New codespace" to launch a new Codespace environment.
 - Edit files directly within the Codespace and commit and push your changes once you're done.
 
-## What technologies are used for this project?
+## Tech Stack
 
-This project is built with:
+- Vite + React + TypeScript
+- Tailwind CSS + shadcn/ui
+- Supabase (Auth, Database, Storage, Edge Functions)
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## Deploy
 
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/7f1693bf-a761-432a-94f5-65fb618c4cfa) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Host on Vercel/Netlify or any static host. Configure environment variables for Supabase.

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Navigate } from 'react-router-dom';
 import { useAuth } from '@/lib/auth';
 import { Navbar } from '@/components/Navbar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,22 +24,22 @@ const VendorDashboard = () => {
     );
   }
 
-  if (!userRoles.includes('vendor')) {
-    navigate('/vendor/auth');
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <a href="/vendor/auth" className="text-sm text-primary underline">Go to vendor login</a>
-      </div>
-    );
+  if (!loading && !userRoles.includes('vendor')) {
+    return <Navigate to="/vendor/auth" replace />;
   }
+
+  const [activeSection, setActiveSection] = useState<string>('vendor-orders');
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       <div className="container mx-auto px-4 py-8">
         <h1 className="text-4xl font-bold mb-8">Vendor Dashboard</h1>
+        <VendorSectionNav activeSection={activeSection} onChange={setActiveSection} />
+        <div className="h-4" />
         <div className="grid md:grid-cols-2 gap-6">
-          <Card className="md:col-span-2">
+          {activeSection === 'vendor-location' && (
+          <Card id="vendor-location" className="md:col-span-2">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <MapPin className="h-8 w-8 text-primary" />
@@ -50,8 +50,10 @@ const VendorDashboard = () => {
               <VendorLocationCard userId={user?.id ?? null} />
             </CardContent>
           </Card>
+          )}
 
-          <Card>
+          {activeSection === 'vendor-products' && (
+          <Card id="vendor-products">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -64,8 +66,10 @@ const VendorDashboard = () => {
               <VendorProductsList userId={user?.id ?? null} />
             </CardContent>
           </Card>
+          )}
 
-          <Card>
+          {activeSection === 'vendor-add-product' && (
+          <Card id="vendor-add-product">
             <CardHeader>
               <div className="flex items-center gap-2">
                 <PlusCircle className="h-8 w-8 text-primary" />
@@ -76,22 +80,38 @@ const VendorDashboard = () => {
               <AddProductForm userId={user?.id ?? null} />
             </CardContent>
           </Card>
+          )}
 
-          <Card className="md:col-span-2">
+          {activeSection === 'vendor-stats' && (
+          <Card id="vendor-stats" className="md:col-span-2">
             <CardHeader>
               <div className="flex items-center gap-2"><TrendingUp className="h-8 w-8 text-primary" /><CardTitle>Stats</CardTitle></div>
             </CardHeader>
             <CardContent><p className="text-3xl font-bold">₹0</p></CardContent>
           </Card>
+          )}
 
-          <Card className="md:col-span-2">
+          {activeSection === 'vendor-orders' && (
+          <Card id="vendor-orders" className="md:col-span-2">
             <CardHeader>
               <div className="flex items-center gap-2"><Truck className="h-8 w-8 text-primary" /><CardTitle>Orders</CardTitle></div>
             </CardHeader>
             <CardContent>
-              <VendorOrders userId={user?.id ?? null} />
+              <VendorOrders userId={user?.id ?? null} view="live" />
             </CardContent>
           </Card>
+          )}
+
+          {activeSection === 'vendor-orders-history' && (
+          <Card id="vendor-orders-history" className="md:col-span-2">
+            <CardHeader>
+              <div className="flex items-center gap-2"><Truck className="h-8 w-8 text-primary" /><CardTitle>Order History</CardTitle></div>
+            </CardHeader>
+            <CardContent>
+              <VendorOrders userId={user?.id ?? null} view="history" />
+            </CardContent>
+          </Card>
+          )}
         </div>
       </div>
     </div>
@@ -99,6 +119,35 @@ const VendorDashboard = () => {
 };
 
 export default VendorDashboard;
+
+const VendorSectionNav = ({ activeSection, onChange }: { activeSection: string; onChange: (id: string) => void }) => {
+  const sections = [
+    { id: 'vendor-location', label: 'Location' },
+    { id: 'vendor-products', label: 'My Products' },
+    { id: 'vendor-add-product', label: 'Add Product' },
+    { id: 'vendor-orders', label: 'Orders' },
+    { id: 'vendor-orders-history', label: 'Order History' },
+    { id: 'vendor-stats', label: 'Stats' },
+  ];
+  return (
+    <div className="sticky top-16 z-40">
+      <div className="rounded-xl border bg-card shadow-sm px-3 py-2">
+        <div className="flex flex-wrap gap-2">
+          {sections.map((s) => (
+            <Button
+              key={s.id}
+              variant={activeSection === s.id ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => onChange(s.id)}
+            >
+              {s.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const VendorLocationCard = ({ userId }: { userId: string | null }) => {
   const queryClient = useQueryClient();
@@ -295,7 +344,7 @@ const AddProductForm = ({ userId }: { userId: string | null }) => {
   );
 };
 
-const VendorOrders = ({ userId }: { userId: string | null }) => {
+const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?: 'live' | 'history' }) => {
   const { data: vendor } = useQuery({
     queryKey: ['vendor-location', userId],
     enabled: !!userId,
@@ -376,13 +425,24 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
               console.error('Address query error for order', order.id, ':', addressError);
             }
             
+            // Get delivery request status for this order
+            const { data: dr, error: drErr } = await (supabase as any)
+              .from('delivery_requests')
+              .select('status')
+              .eq('order_id', order.id)
+              .maybeSingle();
+            if (drErr) {
+              console.error('Delivery request query error for order', order.id, ':', drErr);
+            }
+
             console.log('Order', order.id, 'profile:', profile, 'address:', address);
             
             return {
               ...order,
               profiles: profile,
               addresses: address,
-              order_items: orderItems || []
+              order_items: orderItems || [],
+              delivery_requests: dr || null,
             };
           }
           
@@ -406,6 +466,8 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
         order_items: Array<{ id: string; product_id: string | null; quantity: number; snapshot_name: string; snapshot_price: number; products: { vendor_id: string } | null }>;
       }>;
     },
+    // Fallback polling to reflect delivery partner updates quickly
+    refetchInterval: 5000,
   });
 
   const queryClient = useQueryClient();
@@ -441,13 +503,13 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
 
       // After assignment, set orders.delivery_partner_id so partner can update order per RLS
       // 1) Get assigned partner (delivery_partners.id)
-      const { data: reqRow, error: reqErr } = await supabase
+      const { data: reqRow, error: reqErr } = await (supabase as any)
         .from('delivery_requests')
         .select('assigned_partner_id')
         .eq('order_id', orderId)
         .maybeSingle();
       if (reqErr) throw reqErr;
-      const assignedPartnerId = reqRow?.assigned_partner_id;
+      const assignedPartnerId = (reqRow as any)?.assigned_partner_id;
       if (assignedPartnerId) {
         // 2) Map to profiles.id (delivery_partners.user_id)
         const { data: partnerRow, error: partnerErr } = await supabase
@@ -696,6 +758,18 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
   if (isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
   if (!orders || orders.length === 0) return <p className="text-sm text-muted-foreground">No orders for your products yet.</p>;
 
+  const splitByStatus = (list: any[]) => {
+    const live: any[] = [];
+    const history: any[] = [];
+    for (const o of list) {
+      const s = ((o as any).delivery_requests?.status || o.delivery_status) as string | null;
+      if (s === 'delivered' || s === 'rejected_by_vendor' || s === 'cancelled') history.push(o);
+      else live.push(o);
+    }
+    return { live, history };
+  };
+  const { live: liveOrders, history: historyOrders } = splitByStatus(orders);
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center mb-4">
@@ -709,14 +783,17 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
           Test Access
         </Button>
       </div>
-      {orders.filter((o) => !hiddenOrderIds.includes(o.id)).map((o) => (
-        <div key={o.id} className="p-4 border rounded-md">
+      {(view === 'live' ? liveOrders : historyOrders).filter((o) => !hiddenOrderIds.includes(o.id)).map((o) => {
+        const effectiveStatus = ((o as any).delivery_requests?.status || o.delivery_status) as string | null;
+        const delivered = effectiveStatus === 'delivered';
+        return (
+        <div key={o.id} className={`p-4 border rounded-md ${delivered ? 'border-green-500 bg-green-50' : ''}`}>
           <div className="flex items-center justify-between mb-3">
             <div>
               <div className="font-semibold">Order #{o.id.slice(0, 8)}</div>
               <div className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleString()}</div>
             </div>
-            <div className="text-sm">Status: <span className="uppercase">{STATUS_LABEL[(o.delivery_status || 'pending') as any] || (o.delivery_status || 'pending')}</span></div>
+            <div className="text-sm">Status: <span className={`uppercase ${delivered ? 'text-green-700' : ''}`}>{STATUS_LABEL[(effectiveStatus || 'pending') as any] || (effectiveStatus || 'pending')}</span></div>
           </div>
 
           {/* Customer Info */}
@@ -758,22 +835,50 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
           <div className="flex items-center justify-between">
             <div className="font-bold">Total: ₹{o.final_amount}</div>
             <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" onClick={() => downloadReceipt(o)}>
+              <Button size="sm" variant="outline" onClick={() => downloadReceipt(o)} className={delivered ? 'border-green-600 text-green-700' : ''}>
                 <Download className="h-4 w-4 mr-1" /> Download Receipt
               </Button>
+              {view === 'live' && !delivered && (
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => assignNearest.mutate(o.id)}
-                disabled={assignNearest.isPending || vendor?.latitude == null || vendor?.longitude == null || ['assigned','picked_up','out_for_delivery','delivered'].includes(o.delivery_status)}
-                title={vendor?.latitude == null || vendor?.longitude == null ? 'Set shop location first' : o.delivery_status === 'assigned' ? 'Already Assigned' : ''}
+                disabled={
+                  assignNearest.isPending ||
+                  vendor?.latitude == null ||
+                  vendor?.longitude == null ||
+                  ['assigned','accepted','picked_up','out_for_delivery','delivered'].includes(((o as any).delivery_requests?.status || o.delivery_status) as any)
+                }
+                title={
+                  vendor?.latitude == null || vendor?.longitude == null
+                    ? 'Set shop location first'
+                    : ((o as any).delivery_requests?.status || o.delivery_status) === 'assigned'
+                    ? 'Awaiting partner response'
+                    : ''
+                }
               >
-                <Check className="h-4 w-4 mr-1" /> {['assigned','picked_up','out_for_delivery','delivered'].includes(o.delivery_status) ? 'Already Assigned' : assignNearest.isPending ? 'Assigning…' : 'Approve & Assign'}
+                <Check className="h-4 w-4 mr-1" />
+                {
+                  assignNearest.isPending
+                    ? 'Assigning…'
+                    : ((s => (
+                        s === 'assigned'
+                          ? 'Awaiting Partner'
+                          : s === 'accepted'
+                          ? 'Accepted by Partner'
+                          : ['picked_up','out_for_delivery','delivered'].includes(s as any)
+                          ? 'Already Assigned'
+                          : 'Approve & Assign'
+                      ))(((o as any).delivery_requests?.status || o.delivery_status) as any))
+                }
               </Button>
+              )}
+              {view === 'live' && !delivered && (
               <Button size="sm" variant="destructive" onClick={() => rejectOrder.mutate(o.id)} disabled={rejectOrder.isPending}>
                 <X className="h-4 w-4 mr-1" /> Reject
               </Button>
-              {(o.delivery_status === 'delivered' || o.delivery_status === 'cancelled' || o.delivery_status === 'rejected_by_vendor') && (
+              )}
+              {view === 'history' && (
                 <Button size="sm" variant="outline" onClick={() => deleteOrder.mutate(o.id)} disabled={deleteOrder.isPending}>
                   <Trash2 className="h-4 w-4 mr-1" /> Delete
                 </Button>
@@ -781,7 +886,8 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
             </div>
           </div>
         </div>
-      ))}
+      );
+      })}
     </div>
   );
 };

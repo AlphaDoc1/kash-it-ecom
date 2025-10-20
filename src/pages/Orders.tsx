@@ -82,19 +82,32 @@ const Orders = () => {
 
   const steps = ORDER_STATUSES;
 
-  // Hide user-deleted or vendor-deleted orders by default
-  const filteredOrders = (orders || []).filter((order: any) => {
-    // Only hide hard deletes (or future user_deleted), not rejected_by_vendor
-    const status = order.delivery_status;
-    return !['deleted','user_deleted'].includes(status);
-  });
+  const [view, setView] = useState<'live' | 'history'>('live');
+  const splitOrders = (list: any[]) => {
+    const live: any[] = [];
+    const history: any[] = [];
+    for (const o of list || []) {
+      const s = (o as any).delivery_requests?.status || o.delivery_status;
+      const isDeleted = ['deleted','user_deleted'].includes(s);
+      if (isDeleted) continue;
+      if (['delivered','rejected_by_vendor','cancelled'].includes(s)) history.push(o);
+      else live.push(o);
+    }
+    return { live, history };
+  };
+  const { live: liveOrders, history: historyOrders } = splitOrders(orders || []);
+  const filteredOrders = view === 'live' ? liveOrders : historyOrders;
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
       
       <div className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold mb-8">My Orders</h1>
+        <h1 className="text-4xl font-bold mb-4">My Orders</h1>
+        <div className="mb-4 flex gap-2">
+          <Button size="sm" variant={view === 'live' ? 'default' : 'outline'} onClick={() => setView('live')}>Live Orders</Button>
+          <Button size="sm" variant={view === 'history' ? 'default' : 'outline'} onClick={() => setView('history')}>Order History</Button>
+        </div>
 
         {isLoading ? (
           <div className="space-y-4">
@@ -131,7 +144,7 @@ const Orders = () => {
                 </CardHeader>
                  <CardContent>
                   <UserOrderTracking orderId={order.id} />
-                  <StatusTimeline status={effectiveStatus} />
+                  <StatusTimeline status={(effectiveStatus || 'pending') as string} />
                   <div className="space-y-2 mb-4">
                     {order.order_items?.map((item) => (
                       <div key={item.id} className="flex justify-between text-sm">
@@ -149,7 +162,7 @@ const Orders = () => {
                     <span>Total</span>
                     <span className="text-primary">₹{order.final_amount}</span>
                   </div>
-                  {(effectiveStatus === 'delivered' || effectiveStatus === 'rejected_by_vendor' || effectiveStatus === 'cancelled') && (
+                  {view === 'history' && (
                     <div className="pt-3 flex justify-end">
                       <Button variant="outline" size="sm" onClick={() => deleteOrder.mutate(order.id)} disabled={deleteOrder.isPending}>
                         Delete Order
@@ -169,7 +182,7 @@ const Orders = () => {
 
 export default Orders;
 
-const StatusTimeline = ({ status }: { status: string }) => {
+const StatusTimeline = ({ status }: { status: any }) => {
   const steps = ORDER_STATUSES;
   const currentIndex = Math.max(0, steps.indexOf((status || 'pending').toLowerCase()));
   return (
@@ -190,14 +203,14 @@ const UserOrderTracking = ({ orderId }: { orderId: string }) => {
     queryKey: ['delivery-tracking', orderId],
     refetchInterval: 5000,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('delivery_tracking')
         .select('latitude, longitude')
         .eq('order_id', orderId)
         .order('recorded_at', { ascending: false })
         .limit(1);
       if (error) throw error;
-      return data as Array<{ latitude: number; longitude: number }>;
+      return (data as any[]) as Array<{ latitude: number; longitude: number }>;
     }
   });
 

@@ -21,7 +21,7 @@ const signupSchema = loginSchema.extend({
 });
 
 const Auth = () => {
-  const { user, signIn, signUp } = useAuth();
+  const { user, userRoles, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   
@@ -33,15 +33,17 @@ const Auth = () => {
     if (!user) return;
     // Namespace-aware redirect when already signed in
     if (sessionNamespace === 'admin') {
-      navigate('/admin');
+      const isAdmin = userRoles.includes('admin');
+      if (isAdmin) navigate('/admin');
       return;
     }
     if (sessionNamespace === 'vendor') {
-      navigate('/vendor');
+      const isVendor = userRoles.includes('vendor');
+      if (isVendor) navigate('/vendor');
       return;
     }
     navigate('/');
-  }, [user, navigate]);
+  }, [user, userRoles, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -92,6 +94,12 @@ const Auth = () => {
           </div>
           <CardTitle className="text-2xl font-bold">Welcome to Kash.it</CardTitle>
           <CardDescription>Sign in to your account or create a new one</CardDescription>
+          {sessionNamespace === 'vendor' && user && !userRoles.includes('vendor') && (
+            <div className="mt-2 text-sm text-destructive">This account does not have the vendor role. Please contact support.</div>
+          )}
+          {sessionNamespace === 'admin' && user && !userRoles.includes('admin') && (
+            <div className="mt-2 text-sm text-destructive">This account does not have the admin role.</div>
+          )}
         </CardHeader>
         <CardContent>
           <Tabs defaultValue="login" className="w-full">

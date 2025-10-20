@@ -115,6 +115,7 @@ const AssignedRequests = () => {
   const queryClient = useQueryClient();
   const [hiddenRequestIds, setHiddenRequestIds] = useState<string[]>([] as string[]);
   const HIDDEN_STORAGE_KEY = 'hiddenDeliveryRequestIds';
+  const [view, setView] = useState<'live' | 'history'>('live');
 
   // Load hidden list from localStorage so removed items stay hidden after refresh
   useEffect(() => {
@@ -430,7 +431,11 @@ const AssignedRequests = () => {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-semibold">Assigned Requests</h2>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>Refresh</Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant={view === 'live' ? 'default' : 'outline'} onClick={() => setView('live')}>Live</Button>
+          <Button size="sm" variant={view === 'history' ? 'default' : 'outline'} onClick={() => setView('history')}>History</Button>
+          <Button variant="outline" size="sm" onClick={() => refetch()}>Refresh</Button>
+        </div>
       </div>
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -438,7 +443,14 @@ const AssignedRequests = () => {
         <p className="text-sm text-muted-foreground">No assigned requests.</p>
       ) : (
         <div className="space-y-3">
-          {requests.filter((r: any) => !hiddenRequestIds.includes(r.id)).map((r: any) => (
+          {requests
+            .filter((r: any) => !hiddenRequestIds.includes(r.id))
+            .filter((r: any) => {
+              const s = r.orders?.delivery_status || r.status;
+              if (view === 'history') return ['delivered','rejected_by_partner','cancelled'].includes(s);
+              return !['delivered','rejected_by_partner','cancelled'].includes(s);
+            })
+            .map((r: any) => (
             <Card key={r.id}>
               <CardHeader className="pb-2">
                 <CardTitle className="text-lg">Order #{r.order_id?.slice(0,8)} <span className="text-xs uppercase ml-2 text-muted-foreground">{STATUS_LABEL[(r.orders?.delivery_status || r.status || 'pending') as any] || (r.orders?.delivery_status || r.status || 'pending')}</span></CardTitle>
@@ -447,7 +459,7 @@ const AssignedRequests = () => {
                 <div className="text-sm">
                   <div>Vendor: <span className="font-medium">{r.vendors?.business_name || r.vendor_id}</span></div>
                 </div>
-                {(r.orders?.delivery_status === 'assigned' || r.status === 'assigned') && (
+              {view === 'live' && (r.orders?.delivery_status === 'assigned' || r.status === 'assigned') && (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => respond.mutate({ requestId: r.id, action: 'accepted' })}>
                       <Check className="h-4 w-4 mr-1" /> Accept
@@ -459,39 +471,39 @@ const AssignedRequests = () => {
                   </div>
                 )}
 
-                {(r.orders?.delivery_status === 'assigned' || r.status === 'accepted') && (
+              {view === 'live' && (r.orders?.delivery_status === 'assigned' || r.status === 'accepted') && (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => openNavToVendor(r)}>Open Navigation to Vendor</Button>
                     <Button size="sm" variant="outline" onClick={() => markPickedUp.mutate(r)}>Mark Picked Up</Button>
                   </div>
                 )}
 
-                {(r.orders?.delivery_status === 'picked_up' || r.status === 'picked_up') && (
+              {view === 'live' && (r.orders?.delivery_status === 'picked_up' || r.status === 'picked_up') && (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => { openNavToCustomer(r); markOutForDelivery.mutate(r); }}>Out for Delivery</Button>
                   </div>
                 )}
 
-                {(r.orders?.delivery_status === 'out_for_delivery' || r.status === 'out_for_delivery') && (
+              {view === 'live' && (r.orders?.delivery_status === 'out_for_delivery' || r.status === 'out_for_delivery') && (
                   <div className="flex gap-2">
                     <Button size="sm" onClick={() => openNavToCustomer(r)}>Open Navigation to Customer</Button>
                     <Button size="sm" variant="outline" onClick={() => markDelivered.mutate(r)}>Mark as Delivered</Button>
                   </div>
                 )}
 
-                {(r.orders?.delivery_status === 'delivered' || r.status === 'delivered') && (
+              {view === 'history' && (r.orders?.delivery_status === 'delivered' || r.status === 'delivered') && (
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => removeFromDashboard(r.id)}>Delete</Button>
                   </div>
                 )}
 
-                {r.status === 'rejected_by_partner' && (
+              {view === 'history' && r.status === 'rejected_by_partner' && (
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => removeFromDashboard(r.id)}>Delete</Button>
                   </div>
                 )}
 
-                {r.status === 'cancelled' && (
+              {view === 'history' && r.status === 'cancelled' && (
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => removeFromDashboard(r.id)}>Delete</Button>
                   </div>
