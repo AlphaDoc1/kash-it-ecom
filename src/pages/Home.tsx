@@ -105,7 +105,7 @@ const Home = () => {
         <section className="py-6 sm:py-8 md:py-12 px-4 bg-background">
           <div className="container mx-auto">
             <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8">Quick Actions</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
               <Link to="/products" className="group">
                 <Card className="text-center border-none shadow-md hover:shadow-lg transition-shadow group-hover:scale-105">
                   <CardContent className="p-4 sm:p-6">
@@ -223,7 +223,7 @@ const Home = () => {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
             {featuredProducts?.map((product) => (
               <ProductCard key={product.id} product={product} />
             ))}

@@ -107,22 +107,22 @@ const Products = () => {
           </Select>
         </div>
 
-        {/* Products Grid */}
-        {isLoading ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-            {[...Array(8)].map((_, i) => (
-              <Card key={i} className="animate-pulse">
-                <div className="aspect-square bg-muted" />
-                <CardContent className="p-3 sm:p-4 space-y-2">
-                  <div className="h-3 sm:h-4 bg-muted rounded" />
-                  <div className="h-3 sm:h-4 bg-muted rounded w-2/3" />
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : products && products.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
-            {products.map((product) => (
+            {/* Products Grid */}
+            {isLoading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+                {[...Array(8)].map((_, i) => (
+                  <Card key={i} className="animate-pulse">
+                    <div className="aspect-square bg-muted" />
+                    <CardContent className="p-3 sm:p-4 space-y-2">
+                      <div className="h-3 sm:h-4 bg-muted rounded" />
+                      <div className="h-3 sm:h-4 bg-muted rounded w-2/3" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            ) : products && products.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
+                {products.map((product) => (
               <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow h-full flex flex-col">
                 <CardHeader className="p-0">
                   <div className="aspect-square bg-gradient-card flex items-center justify-center">

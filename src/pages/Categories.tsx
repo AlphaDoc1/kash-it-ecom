@@ -24,19 +24,19 @@ const Categories = () => {
     <div className="min-h-screen bg-background">
       <Navbar />
       
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold mb-8">Product Categories</h1>
+      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-6 md:py-8">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold mb-4 sm:mb-6 md:mb-8">Product Categories</h1>
 
         {isLoading ? (
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
             {[...Array(8)].map((_, i) => (
               <Card key={i} className="animate-pulse">
-                <div className="h-40 bg-muted" />
+                <div className="h-32 sm:h-40 bg-muted" />
               </Card>
             ))}
           </div>
         ) : categories && categories.length > 0 ? (
-          <div className="grid sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
             {categories.map((category) => (
               <Link key={category.id} to={`/products?category=${category.id}`}>
                 <Card className="overflow-hidden hover:shadow-lg transition-shadow cursor-pointer group">
@@ -49,10 +49,10 @@ const Categories = () => {
                       )}
                     </div>
                   </CardHeader>
-                  <CardContent className="p-4">
-                    <CardTitle className="text-lg text-center">{category.name}</CardTitle>
+                  <CardContent className="p-3 sm:p-4">
+                    <CardTitle className="text-sm sm:text-base md:text-lg text-center">{category.name}</CardTitle>
                     {category.description && (
-                      <p className="text-sm text-muted-foreground text-center mt-2 line-clamp-2">
+                      <p className="text-xs sm:text-sm text-muted-foreground text-center mt-1 sm:mt-2 line-clamp-2">
                         {category.description}
                       </p>
                     )}
@@ -62,9 +62,9 @@ const Categories = () => {
             ))}
           </div>
         ) : (
-          <div className="text-center py-12">
-            <Folder className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-            <p className="text-xl text-muted-foreground">No categories available</p>
+          <div className="text-center py-8 sm:py-12">
+            <Folder className="h-12 w-12 sm:h-16 sm:w-16 text-muted-foreground mx-auto mb-3 sm:mb-4" />
+            <p className="text-lg sm:text-xl text-muted-foreground">No categories available</p>
           </div>
         )}
       </div>
