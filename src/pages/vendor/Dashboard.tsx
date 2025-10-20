@@ -12,6 +12,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getCurrentPosition } from '@/lib/utils';
+import { STATUS_LABEL, ORDER_STATUSES } from '@/lib/orderStatus';
 
 const VendorDashboard = () => {
   const { userRoles, user, loading } = useAuth();
@@ -415,6 +416,9 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
         queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor.id] });
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor.id] });
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_requests' }, () => {
         queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor.id] });
       })
@@ -424,23 +428,60 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
   const [hiddenOrderIds, setHiddenOrderIds] = useState<string[]>([]);
   const assignNearest = useMutation({
     mutationFn: async (orderId: string) => {
-      const { error: rpcErr } = await (supabase as any).rpc('assign_nearest_partner', { p_order_id: orderId });
-      if (rpcErr) throw rpcErr;
-      // Reflect status on orders table for UI consistency
-      const { error: orderErr } = await supabase
+      // First, mark order as approved by vendor to satisfy transition rules
+      const { error: approveErr } = await supabase
         .from('orders')
-        .update({ delivery_status: 'assigned' as any })
+        .update({ delivery_status: 'approved' as any })
         .eq('id', orderId);
-      if (orderErr) throw orderErr;
+      if (approveErr) throw approveErr;
+
+      // Then, request backend to assign nearest partner (should set assigned server-side)
+      const { data: rpcData, error: rpcErr } = await (supabase as any).rpc('assign_nearest_partner', { p_order_id: orderId });
+      if (rpcErr) throw rpcErr;
+
+      // After assignment, set orders.delivery_partner_id so partner can update order per RLS
+      // 1) Get assigned partner (delivery_partners.id)
+      const { data: reqRow, error: reqErr } = await supabase
+        .from('delivery_requests')
+        .select('assigned_partner_id')
+        .eq('order_id', orderId)
+        .maybeSingle();
+      if (reqErr) throw reqErr;
+      const assignedPartnerId = reqRow?.assigned_partner_id;
+      if (assignedPartnerId) {
+        // 2) Map to profiles.id (delivery_partners.user_id)
+        const { data: partnerRow, error: partnerErr } = await supabase
+          .from('delivery_partners')
+          .select('user_id')
+          .eq('id', assignedPartnerId)
+          .maybeSingle();
+        if (partnerErr) throw partnerErr;
+        if (partnerRow?.user_id) {
+          const { error: updOrderErr } = await supabase
+            .from('orders')
+            .update({ delivery_partner_id: partnerRow.user_id as any, delivery_status: 'assigned' as any })
+            .eq('id', orderId);
+          if (updOrderErr) throw updOrderErr;
+        }
+      }
+
       return { ok: true } as const;
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
-      toast.success('Assigned to nearest delivery partner');
+    onMutate: async (orderId: string) => {
+      await queryClient.cancelQueries({ queryKey: ['vendor-orders', vendor?.id] });
+      const prev = queryClient.getQueryData<any[]>(['vendor-orders', vendor?.id]) || [];
+      const next = prev.map((o) => o.id === orderId ? { ...o, delivery_status: 'approved' } : o);
+      queryClient.setQueryData(['vendor-orders', vendor?.id], next);
+      return { prev } as { prev: any[] };
     },
-    onError: (err: any) => {
+    onError: (err: any, _orderId, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['vendor-orders', vendor?.id], ctx.prev);
       console.error('Assign nearest error:', err);
       toast.error(err?.message || 'Failed to assign partner');
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
+      toast.success('Assigned to nearest delivery partner');
     },
   });
 
@@ -675,7 +716,7 @@ const VendorOrders = ({ userId }: { userId: string | null }) => {
               <div className="font-semibold">Order #{o.id.slice(0, 8)}</div>
               <div className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleString()}</div>
             </div>
-            <div className="text-sm">Status: <span className="uppercase">{o.delivery_status || 'pending'}</span></div>
+            <div className="text-sm">Status: <span className="uppercase">{STATUS_LABEL[(o.delivery_status || 'pending') as any] || (o.delivery_status || 'pending')}</span></div>
           </div>
 
           {/* Customer Info */}

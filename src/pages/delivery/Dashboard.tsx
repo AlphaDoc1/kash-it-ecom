@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Truck, Package, Check, X, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { buildMapsDirectionUrl, getCurrentPosition, openGoogleMaps, startPositionWatch } from '@/lib/utils';
+import { STATUS_LABEL } from '@/lib/orderStatus';
 
 const DeliveryDashboard = () => {
   const { user, userRoles, loading } = useAuth();
@@ -155,6 +156,38 @@ const AssignedRequests = () => {
       return data as any[];
     },
   });
+
+  // Optimistic cache helpers for delivery requests
+  const optimisticallyUpdateRequest = async (
+    requestId: string,
+    updater: (prev: any[]) => any[]
+  ) => {
+    await queryClient.cancelQueries({ queryKey: ['delivery-requests', partner?.id] });
+    const prev = queryClient.getQueryData<any[]>(['delivery-requests', partner?.id]) || [];
+    const next = updater(prev);
+    queryClient.setQueryData(['delivery-requests', partner?.id], next);
+    return { prev } as { prev: any[] };
+  };
+
+  const invalidateAllOrderConsumers = () => {
+    // Invalidate user Orders page and vendor dashboards that may display the same order
+    queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'orders' });
+    queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'vendor-orders' });
+  };
+
+  useEffect(() => {
+    if (!partner?.id) return;
+    const channel = supabase
+      .channel(`delivery-partner-${partner.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_requests', filter: `assigned_partner_id=eq.${partner.id}` }, () => {
+        queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner.id] });
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner.id] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [partner?.id, queryClient]);
   const removeFromDashboard = async (requestId: string) => {
     try {
       const { error } = await supabase
@@ -190,14 +223,24 @@ const AssignedRequests = () => {
       // If accepted, reflect in orders table so user/vendor see live 'approved'
       if (action === 'accepted') {
         // Find the request to get order_id
-        const req = (requests || []).find((r: any) => r.id === requestId);
+        const req = (queryClient.getQueryData<any[]>(['delivery-requests', partner?.id]) || []).find((r: any) => r.id === requestId);
         if (req?.order_id) {
           await supabase.from('orders').update({ delivery_status: 'approved' as any }).eq('id', req.order_id);
         }
       }
     },
-    onSuccess: () => {
+    onMutate: async (vars) => {
+      const newStatus = vars.action === 'accepted' ? 'accepted' : 'rejected_by_partner';
+      return await optimisticallyUpdateRequest(vars.requestId, (prev) =>
+        prev.map((r) => r.id === vars.requestId ? { ...r, status: newStatus, orders: { ...(r.orders || {}), delivery_status: vars.action === 'accepted' ? 'approved' : r.orders?.delivery_status } } : r)
+      );
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['delivery-requests', partner?.id], ctx.prev);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner?.id] });
+      invalidateAllOrderConsumers();
     },
     onError: (e: any) => toast.error(e?.message || 'Failed to respond'),
   });
@@ -215,8 +258,17 @@ const AssignedRequests = () => {
         .eq('id', request.order_id);
       if (orderError) throw orderError;
     },
-    onSuccess: () => {
+    onMutate: async (request: any) => {
+      return await optimisticallyUpdateRequest(request.id, (prev) =>
+        prev.map((r) => r.id === request.id ? { ...r, status: 'picked_up', picked_up_at: new Date().toISOString(), orders: { ...(r.orders || {}), delivery_status: 'picked_up' } } : r)
+      );
+    },
+    onError: (_err, request, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['delivery-requests', partner?.id], ctx.prev);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner?.id] });
+      invalidateAllOrderConsumers();
     },
   });
 
@@ -233,8 +285,17 @@ const AssignedRequests = () => {
         .eq('id', request.order_id);
       if (orderError) throw orderError;
     },
-    onSuccess: () => {
+    onMutate: async (request: any) => {
+      return await optimisticallyUpdateRequest(request.id, (prev) =>
+        prev.map((r) => r.id === request.id ? { ...r, status: 'out_for_delivery', orders: { ...(r.orders || {}), delivery_status: 'out_for_delivery' } } : r)
+      );
+    },
+    onError: (_err, request, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['delivery-requests', partner?.id], ctx.prev);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner?.id] });
+      invalidateAllOrderConsumers();
     },
   });
 
@@ -251,8 +312,17 @@ const AssignedRequests = () => {
         .eq('id', request.order_id);
       if (orderError) throw orderError;
     },
-    onSuccess: () => {
+    onMutate: async (request: any) => {
+      return await optimisticallyUpdateRequest(request.id, (prev) =>
+        prev.map((r) => r.id === request.id ? { ...r, status: 'delivered', delivered_at: new Date().toISOString(), orders: { ...(r.orders || {}), delivery_status: 'delivered' } } : r)
+      );
+    },
+    onError: (_err, request, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(['delivery-requests', partner?.id], ctx.prev);
+    },
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner?.id] });
+      invalidateAllOrderConsumers();
     },
   });
 
@@ -371,7 +441,7 @@ const AssignedRequests = () => {
           {requests.filter((r: any) => !hiddenRequestIds.includes(r.id)).map((r: any) => (
             <Card key={r.id}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Order #{r.order_id?.slice(0,8)} <span className="text-xs uppercase ml-2 text-muted-foreground">{r.orders?.delivery_status || r.status || 'pending'}</span></CardTitle>
+                <CardTitle className="text-lg">Order #{r.order_id?.slice(0,8)} <span className="text-xs uppercase ml-2 text-muted-foreground">{STATUS_LABEL[(r.orders?.delivery_status || r.status || 'pending') as any] || (r.orders?.delivery_status || r.status || 'pending')}</span></CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="text-sm">
