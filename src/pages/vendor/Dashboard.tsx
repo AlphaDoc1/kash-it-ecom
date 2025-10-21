@@ -391,10 +391,62 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
     queryFn: async () => {
       console.log('Fetching vendor orders...');
       
-      // First get basic orders
+      if (!vendor?.id) {
+        console.log('No vendor ID available');
+        return [];
+      }
+      
+      // Get vendor's product IDs first to avoid recursion
+      const { data: vendorProducts, error: productsError } = await supabase
+        .from('products')
+        .select('id')
+        .eq('vendor_id', vendor.id);
+      
+      if (productsError) {
+        console.error('Error fetching vendor products:', productsError);
+        throw productsError;
+      }
+      
+      if (!vendorProducts || vendorProducts.length === 0) {
+        console.log('No products found for vendor');
+        return [];
+      }
+      
+      const productIds = vendorProducts.map(p => p.id);
+      console.log('Vendor product IDs:', productIds);
+      
+      // Get orders that have items from this vendor's products
+      const { data: orderItems, error: orderItemsError } = await supabase
+        .from('order_items')
+        .select(`
+          order_id,
+          id, 
+          product_id, 
+          quantity, 
+          snapshot_name, 
+          snapshot_price
+        `)
+        .in('product_id', productIds);
+      
+      if (orderItemsError) {
+        console.error('Error fetching order items:', orderItemsError);
+        throw orderItemsError;
+      }
+      
+      if (!orderItems || orderItems.length === 0) {
+        console.log('No order items found for vendor products');
+        return [];
+      }
+      
+      // Get unique order IDs
+      const orderIds = [...new Set(orderItems.map(oi => oi.order_id))];
+      console.log('Order IDs with vendor products:', orderIds);
+      
+      // Get the actual orders
       const { data: basicOrders, error: basicError } = await supabase
         .from('orders')
         .select('*')
+        .in('id', orderIds)
         .order('created_at', { ascending: false });
       
       console.log('Basic orders query result:', { data: basicOrders, error: basicError });
@@ -409,75 +461,61 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
         return [];
       }
       
-      // Filter orders that contain products from this vendor
-      const ordersWithVendorProducts = await Promise.all(
+      // Process orders with details
+      const ordersWithDetails = await Promise.all(
         basicOrders.map(async (order) => {
-          // Get order items with vendor info
-          const { data: orderItems } = await supabase
-            .from('order_items')
-            .select(`
-              id, 
-              product_id, 
-              quantity, 
-              snapshot_name, 
-              snapshot_price, 
-              products(vendor_id)
-            `)
-            .eq('order_id', order.id);
+          // Get order items for this order
+          const orderOrderItems = orderItems.filter(oi => oi.order_id === order.id);
           
-          // Check if any order items belong to this vendor
-          const hasVendorProducts = orderItems?.some((oi: any) => oi.products?.vendor_id === vendor!.id);
+          // Get user profile
+          const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('id, full_name, phone')
+            .eq('id', order.user_id)
+            .single();
           
-          if (hasVendorProducts) {
-            // Get user profile
-            const { data: profile, error: profileError } = await supabase
-              .from('profiles')
-              .select('id, full_name, phone')
-              .eq('id', order.user_id)
-              .single();
-            
-            if (profileError) {
-              console.error('Profile query error for order', order.id, ':', profileError);
-            }
-            
-            // Get address
-            const { data: address, error: addressError } = await supabase
-              .from('addresses')
-              .select('id, label, full_address, city, state, pincode, phone')
-              .eq('id', order.address_id)
-              .single();
-            
-            if (addressError) {
-              console.error('Address query error for order', order.id, ':', addressError);
-            }
-            
-            // Get delivery request status for this order
-            const { data: dr, error: drErr } = await (supabase as any)
-              .from('delivery_requests')
-              .select('status')
-              .eq('order_id', order.id)
-              .maybeSingle();
-            if (drErr) {
-              console.error('Delivery request query error for order', order.id, ':', drErr);
-            }
-
-            console.log('Order', order.id, 'profile:', profile, 'address:', address);
-            
-            return {
-              ...order,
-              profiles: profile,
-              addresses: address,
-              order_items: orderItems || [],
-              delivery_requests: dr || null,
-            };
+          if (profileError) {
+            console.error('Profile query error for order', order.id, ':', profileError);
           }
           
-          return null;
+          // Get address
+          const { data: address, error: addressError } = await supabase
+            .from('addresses')
+            .select('id, label, full_address, city, state, pincode, phone')
+            .eq('id', order.address_id)
+            .single();
+          
+          if (addressError) {
+            console.error('Address query error for order', order.id, ':', addressError);
+          }
+          
+          // Get delivery request status for this order
+          const { data: dr, error: drErr } = await (supabase as any)
+            .from('delivery_requests')
+            .select('status')
+            .eq('order_id', order.id)
+            .maybeSingle();
+          if (drErr) {
+            console.error('Delivery request query error for order', order.id, ':', drErr);
+          }
+
+          console.log('Order', order.id, 'profile:', profile, 'address:', address);
+          
+          return {
+            ...order,
+            profiles: profile,
+            addresses: address,
+            order_items: orderOrderItems.map(oi => ({
+              ...oi,
+              products: { vendor_id: vendor.id }
+            })),
+            delivery_requests: dr || null,
+          };
         })
       );
       
-      // Filter out null results and cancelled orders
-      const filtered = ordersWithVendorProducts.filter(order => order !== null && order.delivery_status !== 'cancelled');
+      // Filter out cancelled orders
+      const filtered = ordersWithDetails.filter(order => order.delivery_status !== 'cancelled');
       
       console.log('Vendor orders with details:', filtered);
       return filtered as Array<{
@@ -499,11 +537,12 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
   const queryClient = useQueryClient();
   useEffect(() => {
     if (!vendor?.id) return;
+    
+    // Use a more targeted approach to avoid RLS recursion
+    // Only listen to order_items and delivery_requests changes
+    // and use polling for orders to avoid the problematic RLS policy
     const channel = supabase
       .channel(`orders-vendor-${vendor.id}`)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor.id] });
-      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
         queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor.id] });
       })
@@ -575,39 +614,156 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
 
   const rejectOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      // Update delivery_status to 'rejected_by_vendor' (no delete)
-      const { error } = await supabase
-        .from('orders')
-        .update({ delivery_status: 'rejected_by_vendor' })
-        .eq('id', orderId);
-      if (error) throw error;
-      await (supabase as any)
-        .from('delivery_requests')
-        .delete()
-        .eq('order_id', orderId);
+      console.log('Rejecting order via RPC:', orderId);
+      const { error } = await (supabase as any).rpc('vendor_reject_order', { p_order_id: orderId });
+      if (error) {
+        console.error('vendor_reject_order RPC error:', error);
+        throw error;
+      }
+      console.log('vendor_reject_order RPC success for:', orderId);
     },
-    onSuccess: () => {
+    onMutate: async (orderId: string) => {
+      // Add to hidden orders immediately
+      setHiddenOrderIds((prev) => [...prev, orderId]);
+      
+      // Get current order status for optimistic update
+      const currentOrders = queryClient.getQueryData<any[]>(['vendor-orders', vendor?.id]) || [];
+      const currentOrder = currentOrders.find(order => order.id === orderId);
+      const isPending = currentOrder?.delivery_status === 'pending';
+      
+      await queryClient.cancelQueries({ queryKey: ['vendor-orders', vendor?.id] });
+      const prevVendorOrders = queryClient.getQueryData<any[]>(['vendor-orders', vendor?.id]) || [];
+      
+      if (isPending) {
+        // For pending orders, remove from list completely
+        const nextVendorOrders = prevVendorOrders.filter(order => order.id !== orderId);
+        queryClient.setQueryData(['vendor-orders', vendor?.id], nextVendorOrders);
+        
+        // Remove from all user orders
+        queryClient.setQueriesData({ queryKey: ['orders'] }, (oldData: any) => {
+          if (!oldData) return oldData;
+          return oldData.filter((order: any) => order.id !== orderId);
+        });
+      } else {
+        // For approved/assigned orders, update status to cancelled
+        const nextVendorOrders = prevVendorOrders.map(order => 
+          order.id === orderId ? { ...order, delivery_status: 'cancelled' } : order
+        );
+        queryClient.setQueryData(['vendor-orders', vendor?.id], nextVendorOrders);
+        
+        // Update order status in all user orders
+        queryClient.setQueriesData({ queryKey: ['orders'] }, (oldData: any) => {
+          if (!oldData) return oldData;
+          return oldData.map((order: any) => 
+            order.id === orderId ? { ...order, delivery_status: 'cancelled' } : order
+          );
+        });
+      }
+      
+      return { prevVendorOrders, isPending };
+    },
+    onSuccess: (_, orderId) => {
+      console.log('Order rejection successful, invalidating queries for order:', orderId);
+      
+      // Invalidate vendor orders
       queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
+      
+      // Invalidate all user orders queries (for all users)
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      
+      // Invalidate any delivery tracking queries
+      queryClient.invalidateQueries({ queryKey: ['delivery-tracking', orderId] });
+      
+      // Invalidate any delivery requests queries
+      queryClient.invalidateQueries({ queryKey: ['delivery-requests'] });
+      
+      // Force refetch of all order-related queries
+      queryClient.refetchQueries({ queryKey: ['orders'] });
+      queryClient.refetchQueries({ queryKey: ['vendor-orders'] });
+      
+      console.log('Queries invalidated and refetched');
       toast.success('Order rejected successfully.');
     },
-    onError: (e: any) => toast.error(e?.message || 'Failed to reject order'),
+    onError: (e: any, orderId, context) => {
+      // Revert optimistic updates on error
+      if (context?.prevVendorOrders) {
+        queryClient.setQueryData(['vendor-orders', vendor?.id], context.prevVendorOrders);
+        
+        // If it was a pending order that we tried to delete, we need to restore it
+        if (context.isPending) {
+          // Restore the order in user orders as well
+          queryClient.setQueriesData({ queryKey: ['orders'] }, (oldData: any) => {
+            if (!oldData) return oldData;
+            // Find the order in the previous data and restore it
+            const restoredOrder = context.prevVendorOrders.find(order => order.id === orderId);
+            if (restoredOrder) {
+              return [...oldData, restoredOrder];
+            }
+            return oldData;
+          });
+        }
+      }
+      // Remove from hidden orders if error occurred
+      setHiddenOrderIds((prev) => prev.filter(id => id !== orderId));
+      toast.error(e?.message || 'Failed to reject order');
+    },
   });
 
   const deleteOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      // Always set cancelled for user, remove any delivery requests
-      await supabase
-        .from('orders')
-        .update({ delivery_status: 'cancelled' as any })
-        .eq('id', orderId);
-      await (supabase as any)
+      console.log('Deleting order:', orderId);
+      
+      // Update delivery_requests status to cancelled first
+      const { error: drError } = await (supabase as any)
         .from('delivery_requests')
-        .delete()
+        .update({ status: 'cancelled' })
         .eq('order_id', orderId);
+      
+      if (drError) {
+        console.log('Could not update delivery_requests, trying to create one:', drError);
+        // Get the user_id from the order
+        const { data: orderData, error: orderError } = await supabase
+          .from('orders')
+          .select('user_id')
+          .eq('id', orderId)
+          .single();
+        
+        if (orderError) {
+          console.error('Error getting order user_id:', orderError);
+        } else if (orderData && vendor?.id) {
+          // If delivery_requests doesn't exist, create one with cancelled status
+          const { error: createError } = await (supabase as any)
+            .from('delivery_requests')
+            .insert({
+              order_id: orderId,
+              vendor_id: vendor.id,
+              user_id: orderData.user_id,
+              status: 'cancelled'
+            });
+          
+          if (createError) {
+            console.error('Error creating delivery_requests:', createError);
+          }
+        }
+      }
+      
+      // Update orders status to cancelled
+      const { error } = await supabase
+        .from('orders')
+        .update({ delivery_status: 'cancelled' })
+        .eq('id', orderId);
+      
+      if (error) {
+        console.error('Error cancelling order:', error);
+        throw error;
+      }
+      
       // Then, permanently remove order for both parties
       setTimeout(async () => {
         await supabase.from('orders').delete().eq('id', orderId);
       }, 750);
+      
+      console.log('Order deleted successfully:', orderId);
     },
     onSuccess: (_, orderId) => {
       toast.success('Order deleted successfully');
@@ -789,7 +945,7 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
     const history: any[] = [];
     for (const o of list) {
       const s = ((o as any).delivery_requests?.status || o.delivery_status) as string | null;
-      if (s === 'delivered' || s === 'rejected_by_vendor' || s === 'cancelled') history.push(o);
+      if (s === 'delivered' || s === 'cancelled') history.push(o);
       else live.push(o);
     }
     return { live, history };

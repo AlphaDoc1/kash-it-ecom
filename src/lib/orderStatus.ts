@@ -5,8 +5,7 @@ export type OrderStatus =
   | 'picked_up'
   | 'out_for_delivery'
   | 'delivered'
-  | 'cancelled'
-  | 'rejected_by_vendor';
+  | 'cancelled';
 
 export const ORDER_STATUSES: OrderStatus[] = [
   'pending',
@@ -15,7 +14,7 @@ export const ORDER_STATUSES: OrderStatus[] = [
   'picked_up',
   'out_for_delivery',
   'delivered',
-  'rejected_by_vendor',
+  'cancelled',
 ];
 
 export const STATUS_LABEL: Record<OrderStatus, string> = {
@@ -26,7 +25,6 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   out_for_delivery: 'Out for Delivery',
   delivered: 'Delivered',
   cancelled: 'Cancelled',
-  rejected_by_vendor: 'Rejected by Vendor',
 };
 
 export const STATUS_COLOR_CLASS: Record<OrderStatus, string> = {
@@ -37,7 +35,6 @@ export const STATUS_COLOR_CLASS: Record<OrderStatus, string> = {
   out_for_delivery: 'bg-purple-500',
   delivered: 'bg-green-500',
   cancelled: 'bg-red-500',
-  rejected_by_vendor: 'bg-red-600',
 };
 
 

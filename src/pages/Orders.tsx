@@ -53,16 +53,54 @@ const Orders = () => {
     queryKey: ['orders', user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data, error } = await supabase
+      
+      // Get basic orders first to avoid RLS recursion
+      const { data: basicOrders, error: basicError } = await supabase
         .from('orders')
-        .select('*, order_items(*, products(name, vendors(business_name))), delivery_requests(status)')
+        .select('*')
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
-      if (error) throw error;
-      if (data) {
-        console.log('Order statuses (live):', data.map(o => ({id: o.id, status: o.delivery_status})));
+      
+      if (basicError) throw basicError;
+      if (!basicOrders) return [];
+      
+      // Get order items for these orders
+      const orderIds = basicOrders.map(o => o.id);
+      const { data: orderItems, error: itemsError } = await supabase
+        .from('order_items')
+        .select('*, products(name)')
+        .in('order_id', orderIds);
+      
+      if (itemsError) {
+        console.error('Error fetching order items:', itemsError);
       }
-      return data;
+      
+      // Get delivery requests for these orders (using any type to avoid type issues)
+      const { data: deliveryRequests, error: drError } = await (supabase as any)
+        .from('delivery_requests')
+        .select('order_id, status')
+        .in('order_id', orderIds);
+      
+      if (drError) {
+        console.error('Error fetching delivery requests:', drError);
+      }
+      
+      // Combine the data
+      const enrichedOrders = basicOrders.map(order => {
+        const orderOrderItems = orderItems?.filter((item: any) => item.order_id === order.id) || [];
+        const deliveryRequest = deliveryRequests?.find((dr: any) => dr.order_id === order.id);
+        
+        return {
+          ...order,
+          order_items: orderOrderItems,
+          delivery_requests: deliveryRequest ? { status: deliveryRequest.status } : null
+        };
+      });
+      
+      if (enrichedOrders) {
+        console.log('Order statuses (live):', enrichedOrders.map(o => ({id: o.id, status: o.delivery_status})));
+      }
+      return enrichedOrders;
     },
     enabled: !!user && !isAuthLoading,
     // Fallback polling in case realtime events are missed or disabled on the table
@@ -83,7 +121,7 @@ const Orders = () => {
     return () => { supabase.removeChannel(channel); };
   }, [user, isAuthLoading, queryClient]);
 
-  const allowed = ['delivered','cancelled','rejected_by_vendor'];
+  const allowed = ['delivered','cancelled'];
 
   const deleteOrder = useMutation({
     mutationFn: async (orderId: string) => {
@@ -120,7 +158,7 @@ const Orders = () => {
       const s = getEffectiveStatus(o);
       const isDeleted = ['deleted','user_deleted'].includes(s);
       if (isDeleted) continue;
-      if (['delivered','rejected_by_vendor','cancelled'].includes(s)) history.push(o);
+      if (['delivered','cancelled'].includes(s)) history.push(o);
       else live.push(o);
     }
     return { live, history };
