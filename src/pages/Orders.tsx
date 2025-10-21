@@ -44,7 +44,21 @@ const Orders = () => {
   const navigate = useNavigate();
 
   const queryClient = useQueryClient();
-  const [hiddenOrderIds, setHiddenOrderIds] = useState<string[]>([]);
+  const [hiddenOrderIds, setHiddenOrderIds] = useState<string[]>([] as string[]);
+  const HIDDEN_USER_ORDERS_KEY = 'hiddenUserOrderIds';
+
+  // Persist hidden orders so deleted items don't reappear after refresh
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(HIDDEN_USER_ORDERS_KEY) || '[]');
+      if (Array.isArray(saved)) setHiddenOrderIds(saved);
+    } catch {}
+  }, []);
+
+  const persistHidden = (next: string[]) => {
+    setHiddenOrderIds(next);
+    try { localStorage.setItem(HIDDEN_USER_ORDERS_KEY, JSON.stringify(next)); } catch {}
+  };
 
   const isAuthLoading = loading;
   // ensure not re-declared
@@ -125,15 +139,12 @@ const Orders = () => {
 
   const deleteOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      const { error } = await supabase
-        .from('orders')
-        .delete()
-        .eq('id', orderId)
-        .eq('user_id', user!.id);
+      // Use server-side RPC to avoid RLS recursion
+      const { error } = await (supabase as any).rpc('user_delete_order', { p_order_id: orderId });
       if (error) throw error;
     },
     onSuccess: (_, orderId) => {
-      setHiddenOrderIds((prev) => [...prev, orderId as string]);
+      persistHidden(Array.from(new Set([...(hiddenOrderIds || []), orderId as string])));
       toast.success('Order deleted successfully.');
       queryClient.invalidateQueries({ queryKey: ['orders', user?.id] });
     },

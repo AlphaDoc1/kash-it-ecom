@@ -552,7 +552,21 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [vendor?.id, queryClient]);
-  const [hiddenOrderIds, setHiddenOrderIds] = useState<string[]>([]);
+  const [hiddenOrderIds, setHiddenOrderIds] = useState<string[]>([] as string[]);
+  const HIDDEN_VENDOR_ORDERS_KEY = 'hiddenVendorOrderIds';
+
+  // Persist hidden orders across refresh so deleted items don't reappear
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(HIDDEN_VENDOR_ORDERS_KEY) || '[]');
+      if (Array.isArray(saved)) setHiddenOrderIds(saved);
+    } catch {}
+  }, []);
+
+  const persistHidden = (next: string[]) => {
+    setHiddenOrderIds(next);
+    try { localStorage.setItem(HIDDEN_VENDOR_ORDERS_KEY, JSON.stringify(next)); } catch {}
+  };
   const assignNearest = useMutation({
     mutationFn: async (orderId: string) => {
       // First, mark order as approved by vendor to satisfy transition rules
@@ -623,8 +637,8 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
       console.log('vendor_reject_order RPC success for:', orderId);
     },
     onMutate: async (orderId: string) => {
-      // Add to hidden orders immediately
-      setHiddenOrderIds((prev) => [...prev, orderId]);
+      // Add to hidden orders immediately (and persist)
+      persistHidden(Array.from(new Set([...(hiddenOrderIds || []), orderId])));
       
       // Get current order status for optimistic update
       const currentOrders = queryClient.getQueryData<any[]>(['vendor-orders', vendor?.id]) || [];
@@ -704,76 +718,30 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
         }
       }
       // Remove from hidden orders if error occurred
-      setHiddenOrderIds((prev) => prev.filter(id => id !== orderId));
+      persistHidden((hiddenOrderIds || []).filter(id => id !== orderId));
       toast.error(e?.message || 'Failed to reject order');
     },
   });
 
   const deleteOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      console.log('Deleting order:', orderId);
-      
-      // Update delivery_requests status to cancelled first
-      const { error: drError } = await (supabase as any)
-        .from('delivery_requests')
-        .update({ status: 'cancelled' })
-        .eq('order_id', orderId);
-      
-      if (drError) {
-        console.log('Could not update delivery_requests, trying to create one:', drError);
-        // Get the user_id from the order
-        const { data: orderData, error: orderError } = await supabase
-          .from('orders')
-          .select('user_id')
-          .eq('id', orderId)
-          .single();
-        
-        if (orderError) {
-          console.error('Error getting order user_id:', orderError);
-        } else if (orderData && vendor?.id) {
-          // If delivery_requests doesn't exist, create one with cancelled status
-          const { error: createError } = await (supabase as any)
-            .from('delivery_requests')
-            .insert({
-              order_id: orderId,
-              vendor_id: vendor.id,
-              user_id: orderData.user_id,
-              status: 'cancelled'
-            });
-          
-          if (createError) {
-            console.error('Error creating delivery_requests:', createError);
-          }
-        }
-      }
-      
-      // Update orders status to cancelled
-      const { error } = await supabase
-        .from('orders')
-        .update({ delivery_status: 'cancelled' })
-        .eq('id', orderId);
-      
+      console.log('Deleting order via RPC:', orderId);
+      const { error } = await (supabase as any).rpc('vendor_delete_order', { p_order_id: orderId });
       if (error) {
-        console.error('Error cancelling order:', error);
+        console.error('vendor_delete_order RPC error:', error);
         throw error;
       }
-      
-      // Then, permanently remove order for both parties
-      setTimeout(async () => {
-        await supabase.from('orders').delete().eq('id', orderId);
-      }, 750);
-      
-      console.log('Order deleted successfully:', orderId);
+      console.log('vendor_delete_order RPC success for:', orderId);
     },
     onSuccess: (_, orderId) => {
       toast.success('Order deleted successfully');
-      setHiddenOrderIds((prev) => [...prev, orderId as string]);
+      persistHidden(Array.from(new Set([...(hiddenOrderIds || []), orderId as string])));
       queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
     },
     onError: async (e: any, orderId) => {
       try {
         await supabase.from('orders').delete().eq('id', orderId as string);
-        setHiddenOrderIds((prev) => [...prev, orderId as string]);
+        persistHidden(Array.from(new Set([...(hiddenOrderIds || []), orderId as string])));
         toast.success('Order deleted successfully');
         queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
       } catch (err: any) {
