@@ -31,11 +31,11 @@ const AdminDashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-      <div className="container mx-auto px-4 py-8">
-        <h1 className="text-4xl font-bold mb-8">Admin Dashboard</h1>
+      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
+        <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-4 sm:mb-8">Admin Dashboard</h1>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4 mb-4 sm:mb-8">
           <StatsCard title="Users" icon={<Users className="h-4 w-4" />} queryKey="admin-users-count" />
           <StatsCard title="Products" icon={<Package className="h-4 w-4" />} queryKey="admin-products-count" />
           <StatsCard title="Vendors" icon={<Store className="h-4 w-4" />} queryKey="admin-vendors-count" />
@@ -44,15 +44,17 @@ const AdminDashboard = () => {
         </div>
 
         <Tabs defaultValue="vendors" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="vendors">Vendors</TabsTrigger>
-            <TabsTrigger value="delivery">Delivery Partners</TabsTrigger>
-            <TabsTrigger value="products">Products</TabsTrigger>
-            <TabsTrigger value="orders">Orders</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto">
+            <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
+              <TabsTrigger value="vendors" className="text-xs sm:text-sm">Vendors</TabsTrigger>
+              <TabsTrigger value="delivery" className="text-xs sm:text-sm">Delivery</TabsTrigger>
+              <TabsTrigger value="products" className="text-xs sm:text-sm">Products</TabsTrigger>
+              <TabsTrigger value="orders" className="text-xs sm:text-sm">Orders</TabsTrigger>
+            </TabsList>
+          </div>
 
-          <TabsContent value="vendors" className="space-y-6">
-            <div className="grid lg:grid-cols-3 gap-6">
+          <TabsContent value="vendors" className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
               <Card className="lg:col-span-1">
                 <VendorInviteForm invitedByUserId={user?.id ?? null} />
               </Card>
@@ -60,7 +62,7 @@ const AdminDashboard = () => {
                 <VendorInvitationsList />
               </Card>
             </div>
-            <div className="grid lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
               <Card className="lg:col-span-1">
                 <VendorsList />
               </Card>
@@ -73,8 +75,8 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="delivery" className="space-y-6">
-            <div className="grid lg:grid-cols-3 gap-6">
+          <TabsContent value="delivery" className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
               <Card className="lg:col-span-1">
                 <DeliveryApplicationsList />
               </Card>
@@ -87,13 +89,13 @@ const AdminDashboard = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="products" className="space-y-6">
+          <TabsContent value="products" className="space-y-4 sm:space-y-6">
             <Card>
               <VendorProductsApproval />
             </Card>
           </TabsContent>
 
-          <TabsContent value="orders" className="space-y-6">
+          <TabsContent value="orders" className="space-y-4 sm:space-y-6">
             <Card>
               <OrderManagement />
             </Card>
@@ -246,13 +248,13 @@ const OrderManagement = () => {
 
   return (
     <CardContent>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
         <CardHeader className="p-0">
-          <CardTitle className="text-xl flex items-center gap-2">
-            <Truck className="h-5 w-5 text-primary" /> Order Management
+          <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+            <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-primary" /> Order Management
           </CardTitle>
         </CardHeader>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto">
           <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
         </Button>
       </div>
@@ -265,19 +267,19 @@ const OrderManagement = () => {
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3 sm:space-y-4">
           {orders.map((order) => (
-            <div key={order.id} className="p-4 border rounded-lg">
-              <div className="flex justify-between items-start mb-3">
-                <div>
-                  <h3 className="font-semibold">Order #{order.id.slice(-8)}</h3>
-                  <p className="text-sm text-muted-foreground">
+            <div key={order.id} className="p-3 sm:p-4 border rounded-lg">
+              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-3 gap-2">
+                <div className="min-w-0 flex-1">
+                  <h3 className="font-semibold text-sm sm:text-base">Order #{order.id.slice(-8)}</h3>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     {new Date(order.created_at).toLocaleString()}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="font-semibold">₹{order.final_amount?.toFixed(2) || '0.00'}</p>
-                  <div className="flex gap-2 mt-1">
+                <div className="text-left sm:text-right">
+                  <p className="font-semibold text-sm sm:text-base">₹{order.final_amount?.toFixed(2) || '0.00'}</p>
+                  <div className="flex flex-wrap gap-1 sm:gap-2 mt-1">
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.delivery_status)}`}>
                       {order.delivery_status}
                     </span>
@@ -289,25 +291,25 @@ const OrderManagement = () => {
               </div>
 
               {/* Customer Info */}
-              <div className="grid md:grid-cols-2 gap-4 mb-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3">
                 <div>
-                  <h4 className="font-medium text-sm mb-1">Customer</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="font-medium text-xs sm:text-sm mb-1">Customer</h4>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     {order.profiles?.full_name || 'N/A'}
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     {order.profiles?.phone || 'N/A'}
                   </p>
                 </div>
                 <div>
-                  <h4 className="font-medium text-sm mb-1">Delivery Address</h4>
-                  <p className="text-sm text-muted-foreground">
+                  <h4 className="font-medium text-xs sm:text-sm mb-1">Delivery Address</h4>
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     {order.addresses?.label || 'N/A'}
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground break-words">
                     {order.addresses?.full_address || 'N/A'}
                   </p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-xs sm:text-sm text-muted-foreground">
                     {order.addresses?.city}, {order.addresses?.state} - {order.addresses?.pincode}
                   </p>
                 </div>
@@ -315,14 +317,14 @@ const OrderManagement = () => {
 
               {/* Order Items */}
               <div className="mb-3">
-                <h4 className="font-medium text-sm mb-2">Order Items</h4>
+                <h4 className="font-medium text-xs sm:text-sm mb-2">Order Items</h4>
                 <div className="space-y-1">
                   {order.order_items?.map((item) => (
-                    <div key={item.id} className="flex justify-between text-sm">
-                      <span>
+                    <div key={item.id} className="flex flex-col sm:flex-row sm:justify-between text-xs sm:text-sm gap-1">
+                      <span className="break-words">
                         {item.snapshot_name} x {item.quantity}
                         {item.products?.vendors?.business_name && (
-                          <span className="text-muted-foreground ml-2">
+                          <span className="text-muted-foreground ml-1 sm:ml-2 block sm:inline">
                             (Vendor: {item.products.vendors.business_name})
                           </span>
                         )}
@@ -359,11 +361,11 @@ const RejectedOrdersAdmin = () => {
 
   return (
     <CardContent>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
         <CardHeader className="p-0">
-          <CardTitle className="text-xl">Rejected/Deleted Orders</CardTitle>
+          <CardTitle className="text-lg sm:text-xl">Rejected/Deleted Orders</CardTitle>
         </CardHeader>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto">
           <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
         </Button>
       </div>
@@ -374,9 +376,9 @@ const RejectedOrdersAdmin = () => {
       ) : (
         <div className="space-y-2">
           {data.map((o) => (
-            <div key={o.id} className="p-3 border rounded text-sm flex items-center justify-between">
-              <div>
-                <div className="font-medium">#{o.id.slice(0,8)}</div>
+            <div key={o.id} className="p-3 border rounded text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-xs sm:text-sm">#{o.id.slice(0,8)}</div>
                 <div className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleString()} • Cancelled</div>
               </div>
             </div>
@@ -391,7 +393,7 @@ const DeliveryRequestsAdmin = () => {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['admin-delivery-requests'],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('delivery_requests')
         .select('id, order_id, status, assigned_partner_id, vendor_id, user_id, created_at, updated_at')
         .order('created_at', { ascending: false });
@@ -402,11 +404,13 @@ const DeliveryRequestsAdmin = () => {
 
   return (
     <CardContent>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
         <CardHeader className="p-0">
-          <CardTitle className="text-xl flex items-center gap-2"><Truck className="h-5 w-5 text-primary" /> Delivery Requests</CardTitle>
+          <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+            <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-primary" /> Delivery Requests
+          </CardTitle>
         </CardHeader>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto">
           <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
         </Button>
       </div>
@@ -417,9 +421,9 @@ const DeliveryRequestsAdmin = () => {
       ) : (
         <div className="space-y-2">
           {data.map((r) => (
-            <div key={r.id} className="p-3 border rounded text-sm flex items-center justify-between">
-              <div>
-                <div className="font-medium">#{r.order_id?.slice(0,8)}</div>
+            <div key={r.id} className="p-3 border rounded text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-xs sm:text-sm">#{r.order_id?.slice(0,8)}</div>
                 <div className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()} • {r.status}</div>
               </div>
               <div className="text-xs text-muted-foreground">Partner: {r.assigned_partner_id ? r.assigned_partner_id.slice(0,8) : '-'}</div>
@@ -474,15 +478,15 @@ const StatsCard = ({ title, icon, queryKey }: { title: string; icon: React.React
 
   return (
     <Card>
-      <CardContent className="p-6">
+      <CardContent className="p-3 sm:p-4 lg:p-6">
         <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            <p className="text-2xl font-bold">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground truncate">{title}</p>
+            <p className="text-lg sm:text-xl lg:text-2xl font-bold">
               {isLoading ? '-' : count?.toLocaleString() || 0}
             </p>
           </div>
-          <div className="text-muted-foreground">
+          <div className="text-muted-foreground flex-shrink-0 ml-2">
             {icon}
           </div>
         </div>
@@ -539,33 +543,33 @@ const VendorInviteForm = ({ invitedByUserId }: { invitedByUserId: string | null 
   return (
     <CardContent>
       <CardHeader className="p-0 mb-4">
-        <CardTitle className="text-xl flex items-center gap-2">
-          <Send className="h-5 w-5 text-primary" /> Invite Vendor
+        <CardTitle className="text-lg sm:text-xl flex items-center gap-2">
+          <Send className="h-4 w-4 sm:h-5 sm:w-5 text-primary" /> Invite Vendor
         </CardTitle>
       </CardHeader>
-      <form className="space-y-4" onSubmit={onSubmit}>
+      <form className="space-y-3 sm:space-y-4" onSubmit={onSubmit}>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Vendor Email</label>
-          <Input type="email" placeholder="vendor@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <label className="text-xs sm:text-sm font-medium">Vendor Email</label>
+          <Input type="email" placeholder="vendor@example.com" value={email} onChange={(e) => setEmail(e.target.value)} required className="text-sm" />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Business Name</label>
-          <Input placeholder="Acme Foods" value={businessName} onChange={(e) => setBusinessName(e.target.value)} required />
+          <label className="text-xs sm:text-sm font-medium">Business Name</label>
+          <Input placeholder="Acme Foods" value={businessName} onChange={(e) => setBusinessName(e.target.value)} required className="text-sm" />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Business Description</label>
-          <Textarea placeholder="Short description" value={businessDescription} onChange={(e) => setBusinessDescription(e.target.value)} />
+          <label className="text-xs sm:text-sm font-medium">Business Description</label>
+          <Textarea placeholder="Short description" value={businessDescription} onChange={(e) => setBusinessDescription(e.target.value)} className="text-sm min-h-[60px]" />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">Business Address</label>
-          <Textarea placeholder="Full address" value={businessAddress} onChange={(e) => setBusinessAddress(e.target.value)} />
+          <label className="text-xs sm:text-sm font-medium">Business Address</label>
+          <Textarea placeholder="Full address" value={businessAddress} onChange={(e) => setBusinessAddress(e.target.value)} className="text-sm min-h-[60px]" />
         </div>
         <div className="space-y-2">
-          <label className="text-sm font-medium">GSTIN (optional)</label>
-          <Input placeholder="22AAAAA0000A1Z5" value={gstin} onChange={(e) => setGstin(e.target.value)} />
+          <label className="text-xs sm:text-sm font-medium">GSTIN (optional)</label>
+          <Input placeholder="22AAAAA0000A1Z5" value={gstin} onChange={(e) => setGstin(e.target.value)} className="text-sm" />
         </div>
         <div className="pt-2">
-          <Button type="submit" disabled={inviteMutation.isPending}>
+          <Button type="submit" disabled={inviteMutation.isPending} className="w-full sm:w-auto text-sm">
             {inviteMutation.isPending ? 'Sending…' : 'Send Invitation'}
           </Button>
         </div>
@@ -588,9 +592,9 @@ const DeliveryApplicationsList = () => {
 
   return (
     <CardContent>
-      <div className="flex items-center justify-between mb-4">
-        <CardHeader className="p-0"><CardTitle className="text-xl">Delivery Applications</CardTitle></CardHeader>
-        <Button variant="outline" size="sm" onClick={() => refetch()}><RefreshCcw className="h-4 w-4 mr-2" /> Refresh</Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+        <CardHeader className="p-0"><CardTitle className="text-lg sm:text-xl">Delivery Applications</CardTitle></CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto"><RefreshCcw className="h-4 w-4 mr-2" /> Refresh</Button>
       </div>
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -600,7 +604,7 @@ const DeliveryApplicationsList = () => {
         <div className="space-y-2">
           {data.map((a) => (
             <div key={a.id} className="p-3 border rounded">
-              <div className="font-semibold">{a.full_name} <span className="text-xs text-muted-foreground">({a.email})</span></div>
+              <div className="font-semibold text-sm sm:text-base">{a.full_name} <span className="text-xs text-muted-foreground">({a.email})</span></div>
               <div className="text-xs text-muted-foreground">Status: {a.status}</div>
             </div>
           ))}
@@ -668,9 +672,9 @@ const VendorsCrud = () => {
 
   return (
     <CardContent>
-      <div className="flex items-center justify-between mb-4">
-        <CardHeader className="p-0"><CardTitle className="text-xl">Manage Vendors</CardTitle></CardHeader>
-        <Button variant="outline" size="sm" onClick={() => refetch()}><RefreshCcw className="h-4 w-4 mr-2" /> Refresh</Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+        <CardHeader className="p-0"><CardTitle className="text-lg sm:text-xl">Manage Vendors</CardTitle></CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto"><RefreshCcw className="h-4 w-4 mr-2" /> Refresh</Button>
       </div>
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -679,16 +683,16 @@ const VendorsCrud = () => {
       ) : (
         <div className="space-y-2">
           {data.map((v: any) => (
-            <div key={v.id} className="p-4 border rounded flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-semibold truncate">{v.business_name}</div>
+            <div key={v.id} className="p-3 sm:p-4 border rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm sm:text-base truncate">{v.business_name}</div>
                 <div className="text-xs text-muted-foreground">Approved: {v.is_approved ? 'Yes' : 'No'} • Active: {v.is_active ? 'Yes' : 'No'}</div>
                 {v.business_address ? <div className="text-xs text-muted-foreground truncate">{v.business_address}</div> : null}
               </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => toggleApproved.mutate(v)}>{v.is_approved ? 'Unapprove' : 'Approve'}</Button>
-                <Button size="sm" variant="outline" onClick={() => toggleActive.mutate(v)}>{v.is_active ? 'Deactivate' : 'Activate'}</Button>
-                <Button size="sm" variant="destructive" onClick={() => removeVendor.mutate(v)}>Delete</Button>
+              <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                <Button size="sm" variant="outline" onClick={() => toggleApproved.mutate(v)} className="text-xs">{v.is_approved ? 'Unapprove' : 'Approve'}</Button>
+                <Button size="sm" variant="outline" onClick={() => toggleActive.mutate(v)} className="text-xs">{v.is_active ? 'Deactivate' : 'Activate'}</Button>
+                <Button size="sm" variant="destructive" onClick={() => removeVendor.mutate(v)} className="text-xs">Delete</Button>
               </div>
             </div>
           ))}
@@ -756,9 +760,9 @@ const DeliveryPartnersCrud = () => {
 
   return (
     <CardContent>
-      <div className="flex items-center justify-between mb-4">
-        <CardHeader className="p-0"><CardTitle className="text-xl">Manage Delivery Partners</CardTitle></CardHeader>
-        <Button variant="outline" size="sm" onClick={() => refetch()}><RefreshCcw className="h-4 w-4 mr-2" /> Refresh</Button>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+        <CardHeader className="p-0"><CardTitle className="text-lg sm:text-xl">Manage Delivery Partners</CardTitle></CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto"><RefreshCcw className="h-4 w-4 mr-2" /> Refresh</Button>
       </div>
       {isLoading ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -767,16 +771,16 @@ const DeliveryPartnersCrud = () => {
       ) : (
         <div className="space-y-2">
           {data.map((p: any) => (
-            <div key={p.id} className="p-4 border rounded flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-semibold truncate">{p.profiles?.full_name || '-'} <span className="text-xs text-muted-foreground">({p.profiles?.email || '-'})</span></div>
+            <div key={p.id} className="p-3 sm:p-4 border rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm sm:text-base truncate">{p.profiles?.full_name || '-'} <span className="text-xs text-muted-foreground">({p.profiles?.email || '-'})</span></div>
                 <div className="text-xs text-muted-foreground">Verified: {p.is_verified ? 'Yes' : 'No'} • Active: {p.is_active ? 'Yes' : 'No'}</div>
                 <div className="text-xs text-muted-foreground">{p.vehicle_type || '-'} • {p.vehicle_number || '-'}</div>
               </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => toggleVerified.mutate(p)}>{p.is_verified ? 'Unverify' : 'Verify'}</Button>
-                <Button size="sm" variant="outline" onClick={() => toggleActive.mutate(p)}>{p.is_active ? 'Deactivate' : 'Activate'}</Button>
-                <Button size="sm" variant="destructive" onClick={() => removePartner.mutate(p)}>Delete</Button>
+              <div className="flex flex-wrap items-center gap-1 sm:gap-2">
+                <Button size="sm" variant="outline" onClick={() => toggleVerified.mutate(p)} className="text-xs">{p.is_verified ? 'Unverify' : 'Verify'}</Button>
+                <Button size="sm" variant="outline" onClick={() => toggleActive.mutate(p)} className="text-xs">{p.is_active ? 'Deactivate' : 'Activate'}</Button>
+                <Button size="sm" variant="destructive" onClick={() => removePartner.mutate(p)} className="text-xs">Delete</Button>
               </div>
             </div>
           ))}
@@ -838,21 +842,21 @@ const DeliveryApplicationsActions = () => {
 
   return (
     <CardContent>
-      <CardHeader className="p-0 mb-4"><CardTitle className="text-xl">Pending Delivery Approvals</CardTitle></CardHeader>
+      <CardHeader className="p-0 mb-4"><CardTitle className="text-lg sm:text-xl">Pending Delivery Approvals</CardTitle></CardHeader>
       {!data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No pending applications</p>
       ) : (
         <div className="space-y-2">
           {data.map((a) => (
-            <div key={a.id} className="p-4 border rounded flex items-center justify-between">
-              <div>
-                <div className="font-semibold">{a.full_name}</div>
+            <div key={a.id} className="p-3 sm:p-4 border rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold text-sm sm:text-base">{a.full_name}</div>
                 <div className="text-xs text-muted-foreground">{a.email} • {a.phone || '-'}</div>
                 <div className="text-xs text-muted-foreground">{a.vehicle_type || '-'} • {a.vehicle_number || '-'}</div>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" onClick={() => approve.mutate(a)}><Check className="h-4 w-4 mr-2" /> Approve</Button>
-                <Button size="sm" variant="destructive" onClick={() => reject.mutate(a)}>Reject</Button>
+                <Button size="sm" onClick={() => approve.mutate(a)} className="text-xs"><Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> Approve</Button>
+                <Button size="sm" variant="destructive" onClick={() => reject.mutate(a)} className="text-xs">Reject</Button>
               </div>
             </div>
           ))}
@@ -873,7 +877,7 @@ const VendorsList = () => {
         .select('id, business_name, is_active, is_approved, profiles:profiles!inner(full_name)')
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data as Array<{ id: string; business_name: string; is_active: boolean | null; is_approved: boolean | null; profiles: { full_name: string } }>; 
+      return data as any[]; 
     },
   });
 
@@ -898,14 +902,14 @@ const VendorsList = () => {
 
   if (isLoading) return (
     <CardContent>
-      <CardHeader className="p-0 mb-4"><CardTitle className="text-xl">Vendors</CardTitle></CardHeader>
+      <CardHeader className="p-0 mb-4"><CardTitle className="text-lg sm:text-xl">Vendors</CardTitle></CardHeader>
       <p className="text-sm text-muted-foreground">Loading…</p>
     </CardContent>
   );
 
   return (
     <CardContent>
-      <CardHeader className="p-0 mb-4"><CardTitle className="text-xl">Vendors</CardTitle></CardHeader>
+      <CardHeader className="p-0 mb-4"><CardTitle className="text-lg sm:text-xl">Vendors</CardTitle></CardHeader>
       {!data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No vendors found.</p>
       ) : (
@@ -913,13 +917,13 @@ const VendorsList = () => {
           {data.map((v) => (
             <button
               key={v.id}
-              className={`w-full text-left p-3 rounded border ${selectedVendorId === v.id ? 'border-primary' : 'border-muted'}`}
+              className={`w-full text-left p-2 sm:p-3 rounded border ${selectedVendorId === v.id ? 'border-primary bg-primary/5' : 'border-muted hover:border-primary/50'}`}
               onClick={() => {
                 setSelectedVendorId(v.id);
                 localStorage.setItem('admin-selected-vendor', v.id);
               }}
             >
-              <div className="font-semibold">{v.business_name}</div>
+              <div className="font-semibold text-sm sm:text-base">{v.business_name}</div>
               <div className="text-xs text-muted-foreground">Owner: {v.profiles?.full_name || '-'}</div>
             </button>
           ))}
@@ -969,11 +973,11 @@ const VendorProductsApproval = () => {
 
   return (
     <CardContent>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
         <CardHeader className="p-0">
-          <CardTitle className="text-xl flex items-center gap-2"><Eye className="h-5 w-5 text-primary" /> Vendor Products</CardTitle>
+          <CardTitle className="text-lg sm:text-xl flex items-center gap-2"><Eye className="h-4 w-4 sm:h-5 sm:w-5 text-primary" /> Vendor Products</CardTitle>
         </CardHeader>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto">
           <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
         </Button>
       </div>
@@ -985,25 +989,25 @@ const VendorProductsApproval = () => {
       ) : !products || products.length === 0 ? (
         <p className="text-sm text-muted-foreground">No products found for this vendor.</p>
       ) : (
-        <div className="grid md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
           {products.map((p) => (
-            <div key={p.id} className="p-4 border rounded-md flex gap-3 items-center">
-              <div className="w-16 h-16 bg-muted rounded overflow-hidden flex items-center justify-center">
+            <div key={p.id} className="p-3 sm:p-4 border rounded-md flex gap-3 items-center">
+              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-muted rounded overflow-hidden flex items-center justify-center flex-shrink-0">
                 {p.image_url ? (
                   <img src={p.image_url} alt={p.name} className="object-cover w-full h-full" />
                 ) : (
-                  <Package className="h-6 w-6 text-muted-foreground" />
+                  <Package className="h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground" />
                 )}
               </div>
-              <div className="flex-1">
-                <div className="font-semibold">{p.name}</div>
-                <div className="text-sm text-muted-foreground">₹{p.price} • Stock {p.stock}{p.unit ? ` ${p.unit}` : ''}</div>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm sm:text-base truncate">{p.name}</div>
+                <div className="text-xs sm:text-sm text-muted-foreground">₹{p.price} • Stock {p.stock}{p.unit ? ` ${p.unit}` : ''}</div>
               </div>
               {p.is_approved ? (
-                <span className="text-xs text-green-600">Approved</span>
+                <span className="text-xs text-green-600 flex-shrink-0">Approved</span>
               ) : (
-                <Button size="sm" onClick={() => approveMutation.mutate(p.id)} disabled={approveMutation.isPending}>
-                  <Check className="h-4 w-4 mr-2" /> Approve
+                <Button size="sm" onClick={() => approveMutation.mutate(p.id)} disabled={approveMutation.isPending} className="text-xs flex-shrink-0">
+                  <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> Approve
                 </Button>
               )}
             </div>
@@ -1060,7 +1064,7 @@ const VendorInvitationsList = () => {
       const normalizedEmail = inv.email.trim().toLowerCase();
 
       // 1) Find existing profile by email
-      const { data: profiles, error: profErr } = await supabase
+      const { data: profiles, error: profErr } = await (supabase as any)
         .from('profiles')
         .select('*')
         .eq('email', normalizedEmail)
@@ -1127,11 +1131,11 @@ const VendorInvitationsList = () => {
 
   return (
     <CardContent>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
         <CardHeader className="p-0">
-          <CardTitle className="text-xl">Vendor Invitations</CardTitle>
+          <CardTitle className="text-lg sm:text-xl">Vendor Invitations</CardTitle>
         </CardHeader>
-        <Button variant="outline" size="sm" onClick={() => refetch()}>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto">
           <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
         </Button>
       </div>
@@ -1143,26 +1147,27 @@ const VendorInvitationsList = () => {
       ) : (
         <div className="space-y-3">
           {data.map((inv) => (
-            <div key={inv.id} className="p-4 border rounded-md flex flex-col md:flex-row md:items-center gap-3">
-              <div className="flex-1">
-                <div className="font-semibold">{inv.business_name}</div>
-                <div className="text-sm text-muted-foreground">{inv.email}</div>
+            <div key={inv.id} className="p-3 sm:p-4 border rounded-md flex flex-col sm:flex-row sm:items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold text-sm sm:text-base">{inv.business_name}</div>
+                <div className="text-xs sm:text-sm text-muted-foreground">{inv.email}</div>
                 <div className="text-xs text-muted-foreground mt-1">
                   Status: <span className="uppercase">{inv.status}</span>
                   {inv.accepted_at ? ` • Accepted: ${new Date(inv.accepted_at).toLocaleString()}` : ''}
                 </div>
               </div>
               {inv.status === 'pending' && (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <Button
                     size="sm"
                     onClick={() => approveMutation.mutate(inv)}
                     disabled={approveMutation.isPending}
+                    className="text-xs"
                   >
-                    <Check className="h-4 w-4 mr-2" /> Approve
+                    <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> Approve
                   </Button>
-                  <Button variant="destructive" size="sm" onClick={() => revokeMutation.mutate(inv.id)}>
-                    <Ban className="h-4 w-4 mr-2" /> Revoke
+                  <Button variant="destructive" size="sm" onClick={() => revokeMutation.mutate(inv.id)} className="text-xs">
+                    <Ban className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> Revoke
                   </Button>
                 </div>
               )}
