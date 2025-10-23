@@ -214,7 +214,11 @@ const VendorLocationCard = ({ userId }: { userId: string | null }) => {
         <div className="text-sm">
           <div className="font-medium">Status: {hasLocation ? 'Location set' : 'Not set'}</div>
           {hasLocation ? (
-            <div className="text-xs text-muted-foreground break-all">Lat: {vendor.latitude} • Lon: {vendor.longitude}</div>
+            <div className="text-xs text-muted-foreground break-all">
+              Lat: {vendor.latitude} • Lon: {vendor.longitude}
+              <br />
+              <span className="text-green-600">✓ Ready for delivery assignment</span>
+            </div>
           ) : (
             <div className="text-xs text-destructive">Vendor location is required for assignment</div>
           )}
@@ -222,11 +226,11 @@ const VendorLocationCard = ({ userId }: { userId: string | null }) => {
         <Button 
           size="sm" 
           onClick={() => setLocation.mutate()} 
-          disabled={setLocation.isPending || hasLocation} 
-          title={hasLocation ? 'Location already set' : ''}
+          disabled={setLocation.isPending} 
+          title="Update your current location"
           className="w-full sm:w-auto"
         >
-          {hasLocation ? 'Location Set' : 'Use Current Location'}
+          {hasLocation ? 'Update Location' : 'Set Current Location'}
         </Button>
       </div>
     </div>

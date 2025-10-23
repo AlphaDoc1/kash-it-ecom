@@ -348,6 +348,9 @@ const AssignedRequests = () => {
   };
 
   const openNavToCustomer = async (request: any) => {
+    console.log('Opening navigation to customer for request:', request);
+    
+    // Get vendor location
     const { data: vendorRow } = await supabase
       .from('vendors')
       .select('latitude, longitude')
@@ -355,46 +358,86 @@ const AssignedRequests = () => {
       .maybeSingle();
     let vlat = vendorRow?.latitude ?? null;
     let vlon = vendorRow?.longitude ?? null;
+    console.log('Vendor location from DB:', { vlat, vlon });
+    
     if (vlat == null || vlon == null) {
       const me = await getCurrentPosition();
       vlat = me?.lat ?? null;
       vlon = me?.lon ?? null;
+      console.log('Using current position as vendor location:', { vlat, vlon });
     }
+    
+    // Get order details
     const { data: orderRow } = await supabase
       .from('orders')
       .select('address_id, user_id')
       .eq('id', request.order_id)
       .maybeSingle();
-    const { data: addressRow } = await supabase
-      .from('addresses')
-      .select('latitude, longitude')
-      .eq('id', orderRow?.address_id)
-      .maybeSingle();
-    let ulat = addressRow?.latitude ?? null;
-    let ulon = addressRow?.longitude ?? null;
-    if (ulat == null || ulon == null) {
+    console.log('Order details:', orderRow);
+    
+    // Try to get user location from address first
+    let ulat = null;
+    let ulon = null;
+    let locationSource = 'none';
+    
+    if (orderRow?.address_id) {
+      const { data: addressRow } = await supabase
+        .from('addresses')
+        .select('latitude, longitude')
+        .eq('id', orderRow.address_id)
+        .maybeSingle();
+      ulat = addressRow?.latitude ?? null;
+      ulon = addressRow?.longitude ?? null;
+      if (ulat && ulon) {
+        locationSource = 'address';
+        console.log('User location from address:', { ulat, ulon });
+      }
+    }
+    
+    // If no address location, try user profile
+    if ((ulat == null || ulon == null) && orderRow?.user_id) {
       const { data: profileRow } = await supabase
         .from('profiles')
         .select('latitude, longitude')
-        .eq('id', orderRow?.user_id)
+        .eq('id', orderRow.user_id)
         .maybeSingle();
       ulat = profileRow?.latitude ?? null;
       ulon = profileRow?.longitude ?? null;
+      if (ulat && ulon) {
+        locationSource = 'profile';
+        console.log('User location from profile:', { ulat, ulon });
+      }
     }
-    // If still missing, give one last attempt: ask browser
+    
+    // If still missing, use current position as fallback
     if (ulat == null || ulon == null) {
       const me = await getCurrentPosition();
       ulat = me?.lat ?? null;
       ulon = me?.lon ?? null;
+      if (ulat && ulon) {
+        locationSource = 'current_position';
+        console.log('Using current position as user location:', { ulat, ulon });
+      }
     }
-    if (ulat == null || ulon == null) return toast.error('Customer location missing. Ask user to set location in Profile or set on address.');
-    if (vlat == null || vlon == null) return toast.error('Origin missing. Set vendor or your current location.');
+    
+    console.log('Final location source:', locationSource);
+    console.log('Final coordinates - Vendor:', { vlat, vlon }, 'User:', { ulat, ulon });
+    
+    if (ulat == null || ulon == null) {
+      return toast.error('Customer location missing. Ask user to set location in Profile or set on address.');
+    }
+    if (vlat == null || vlon == null) {
+      return toast.error('Origin missing. Set vendor or your current location.');
+    }
+    
     const url = buildMapsDirectionUrl({
       origin: { lat: vlat, lon: vlon },
       destination: { lat: ulat, lon: ulon },
       travelMode: 'driving',
       navigate: true,
     });
+    
+    console.log('Generated maps URL:', url);
     openGoogleMaps(url);
   };
 

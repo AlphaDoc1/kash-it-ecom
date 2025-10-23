@@ -384,13 +384,17 @@ const UserLocationSection = ({ userId }: { userId: string }) => {
       <div className="text-sm">
         <div className="font-medium">Status: {hasLoc ? 'Location set' : 'Not set'}</div>
         {hasLoc ? (
-          <div className="text-xs text-muted-foreground">Lat: {userProfile.latitude} • Lon: {userProfile.longitude}</div>
+          <div className="text-xs text-muted-foreground">
+            Lat: {userProfile.latitude} • Lon: {userProfile.longitude}
+            <br />
+            <span className="text-green-600">✓ Ready for delivery tracking</span>
+          </div>
         ) : (
           <div className="text-xs text-muted-foreground">Set your current GPS for accurate delivery</div>
         )}
       </div>
-      <Button size="sm" onClick={() => setLocation.mutate()} disabled={setLocation.isPending || hasLoc} title={hasLoc ? 'Location already set' : ''}>
-        {hasLoc ? 'Location Set' : 'Use Current Location'}
+      <Button size="sm" onClick={() => setLocation.mutate()} disabled={setLocation.isPending} title="Update your current location">
+        {hasLoc ? 'Update Location' : 'Set Current Location'}
       </Button>
     </div>
   );
