@@ -913,7 +913,8 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
           Test Access
         </Button>
       </div>
-      {(view === 'live' ? liveOrders : historyOrders).filter((o) => !hiddenOrderIds.includes(o.id)).map((o) => {
+      <div className="max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+        {(view === 'live' ? liveOrders : historyOrders).filter((o) => !hiddenOrderIds.includes(o.id)).map((o) => {
         const deliveryRequestStatus = (o as any).delivery_requests?.status as string | null;
         const orderStatus = o.delivery_status as string | null;
         const effectiveStatus = deliveryRequestStatus || orderStatus;
@@ -1040,6 +1041,7 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
         </div>
       );
       })}
+      </div>
     </div>
   );
 };
@@ -1101,7 +1103,7 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
   if (!products || products.length === 0) return <p className="text-sm text-muted-foreground">No products yet.</p>;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
       {products.map((p) => (
         <div key={p.id} className="p-3 sm:p-4 border rounded-md flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           <div className="w-16 h-16 bg-muted rounded overflow-hidden flex items-center justify-center flex-shrink-0">

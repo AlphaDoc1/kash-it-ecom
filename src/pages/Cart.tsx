@@ -98,7 +98,7 @@ const Cart = () => {
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
-            <div className="lg:col-span-2 space-y-3 sm:space-y-4">
+            <div className="lg:col-span-2 space-y-3 sm:space-y-4 max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
               {cartItems.map((item) => (
                 <Card key={item.id} className="p-3 sm:p-4 md:p-6">
                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">

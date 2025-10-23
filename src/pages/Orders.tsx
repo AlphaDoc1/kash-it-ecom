@@ -225,7 +225,7 @@ const Orders = () => {
             <p className="text-sm sm:text-base text-muted-foreground">Start shopping to see your orders here!</p>
           </div>
         ) : (
-          <div className="space-y-3 sm:space-y-4">
+          <div className="space-y-3 sm:space-y-4 max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             {filteredOrders.filter((order) => !hiddenOrderIds.includes(order.id)).map((order) => {
               const effectiveStatus = getEffectiveStatus(order);
               return (

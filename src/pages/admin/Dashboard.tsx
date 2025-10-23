@@ -44,7 +44,7 @@ const AdminDashboard = () => {
         </div>
 
         <Tabs defaultValue="vendors" className="w-full">
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
               <TabsTrigger value="vendors" className="text-xs sm:text-sm">Vendors</TabsTrigger>
               <TabsTrigger value="delivery" className="text-xs sm:text-sm">Delivery</TabsTrigger>
@@ -267,7 +267,7 @@ const OrderManagement = () => {
           </p>
         </div>
       ) : (
-        <div className="space-y-3 sm:space-y-4">
+        <div className="space-y-3 sm:space-y-4 max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {orders.map((order) => (
             <div key={order.id} className="p-3 sm:p-4 border rounded-lg">
               <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-3 gap-2">
@@ -374,7 +374,7 @@ const RejectedOrdersAdmin = () => {
       ) : !data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No rejected or deleted orders.</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {data.map((o) => (
             <div key={o.id} className="p-3 border rounded text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
@@ -419,7 +419,7 @@ const DeliveryRequestsAdmin = () => {
       ) : !data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No delivery requests.</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {data.map((r) => (
             <div key={r.id} className="p-3 border rounded text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="min-w-0 flex-1">
@@ -601,7 +601,7 @@ const DeliveryApplicationsList = () => {
       ) : !data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No applications</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {data.map((a) => (
             <div key={a.id} className="p-3 border rounded">
               <div className="font-semibold text-sm sm:text-base">{a.full_name} <span className="text-xs text-muted-foreground">({a.email})</span></div>
@@ -681,7 +681,7 @@ const VendorsCrud = () => {
       ) : !data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No vendors found</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {data.map((v: any) => (
             <div key={v.id} className="p-3 sm:p-4 border rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -769,7 +769,7 @@ const DeliveryPartnersCrud = () => {
       ) : !data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No delivery partners found</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {data.map((p: any) => (
             <div key={p.id} className="p-3 sm:p-4 border rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -846,7 +846,7 @@ const DeliveryApplicationsActions = () => {
       {!data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No pending applications</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {data.map((a) => (
             <div key={a.id} className="p-3 sm:p-4 border rounded flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
@@ -913,7 +913,7 @@ const VendorsList = () => {
       {!data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No vendors found.</p>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {data.map((v) => (
             <button
               key={v.id}
@@ -989,7 +989,7 @@ const VendorProductsApproval = () => {
       ) : !products || products.length === 0 ? (
         <p className="text-sm text-muted-foreground">No products found for this vendor.</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {products.map((p) => (
             <div key={p.id} className="p-3 sm:p-4 border rounded-md flex gap-3 items-center">
               <div className="w-12 h-12 sm:w-16 sm:h-16 bg-muted rounded overflow-hidden flex items-center justify-center flex-shrink-0">
@@ -1145,7 +1145,7 @@ const VendorInvitationsList = () => {
       ) : !data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No invitations yet.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {data.map((inv) => (
             <div key={inv.id} className="p-3 sm:p-4 border rounded-md flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex-1 min-w-0">

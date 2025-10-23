@@ -485,7 +485,7 @@ const AssignedRequests = () => {
       ) : !requests || requests.length === 0 ? (
         <p className="text-sm text-muted-foreground">No assigned requests.</p>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {requests
             .filter((r: any) => !hiddenRequestIds.includes(r.id))
             .filter((r: any) => {
