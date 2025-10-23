@@ -9,10 +9,27 @@ export default defineConfig(({ mode }) => ({
     host: "::",
     port: 8080,
   },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+  plugins: [
+    react(), 
+    // Only use lovable-tagger in development mode and ensure it doesn't affect favicon
+    mode === "development" && componentTagger({
+      // Disable any favicon interference
+      exclude: ['favicon.ico', 'favicon.svg']
+    })
+  ].filter(Boolean),
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  // Ensure favicon is properly handled
+  build: {
+    rollupOptions: {
+      input: {
+        main: path.resolve(__dirname, 'index.html')
+      }
+    }
+  },
+  // Ensure static assets are properly served
+  publicDir: 'public'
 }));

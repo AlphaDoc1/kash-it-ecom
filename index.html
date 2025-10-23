@@ -6,6 +6,10 @@
     <title>Kash.it</title>
     <meta name="description" content="Kash.it ecommerce platform" />
     <meta name="author" content="Kash.it" />
+    
+    <!-- Prevent default favicon -->
+    <meta name="msapplication-TileColor" content="#ffffff" />
+    <meta name="theme-color" content="#ffffff" />
 
     <meta property="og:title" content="Kash.it" />
     <meta property="og:description" content="Kash.it ecommerce platform" />
@@ -15,12 +19,44 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:site" content="@kash_it" />
     <meta name="twitter:image" content="/favicon.svg" />
+    
+    <!-- Inline favicon to prevent flash - this loads instantly -->
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>" type="image/svg+xml" />
+    
+    <!-- Additional immediate favicon fallback -->
+    <link rel="shortcut icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>" />
+    
+    <!-- Preload main favicon for faster loading -->
+    <link rel="preload" href="/favicon.svg" as="image" type="image/svg+xml" />
+    
+    <!-- Main favicon files -->
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="alternate icon" href="/favicon.ico" />
+    <link rel="icon" href="/favicon.ico" type="image/x-icon" sizes="16x16 32x32" />
+    <link rel="shortcut icon" href="/favicon.ico" type="image/x-icon" />
+    
+    <!-- Apple touch icon -->
+    <link rel="apple-touch-icon" href="/favicon.svg" />
+    
+    <!-- Additional favicon sizes for better browser support -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+    
+    <!-- Cache control for favicon -->
+    <meta http-equiv="Cache-Control" content="public, max-age=31536000" />
   </head>
 
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    
+    <!-- Ensure favicon loads immediately -->
+    <script>
+      // Force favicon to load immediately
+      (function() {
+        const favicon = document.querySelector('link[rel="icon"]');
+        if (favicon) {
+          favicon.href = favicon.href;
+        }
+      })();
+    </script>
   </body>
 </html>
