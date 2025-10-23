@@ -514,8 +514,8 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
         })
       );
       
-      // Filter out cancelled orders
-      const filtered = ordersWithDetails.filter(order => order.delivery_status !== 'cancelled');
+      // Don't filter out any orders - let the UI handle live vs history split
+      const filtered = ordersWithDetails;
       
       console.log('Vendor orders with details:', filtered);
       return filtered as Array<{
@@ -569,13 +569,6 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
   };
   const assignNearest = useMutation({
     mutationFn: async (orderId: string) => {
-      // First, mark order as approved by vendor to satisfy transition rules
-      const { error: approveErr } = await supabase
-        .from('orders')
-        .update({ delivery_status: 'approved' as any })
-        .eq('id', orderId);
-      if (approveErr) throw approveErr;
-
       // Then, request backend to assign nearest partner (should set assigned server-side)
       const { data: rpcData, error: rpcErr } = await (supabase as any).rpc('assign_nearest_partner', { p_order_id: orderId });
       if (rpcErr) throw rpcErr;
@@ -611,7 +604,8 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
     onMutate: async (orderId: string) => {
       await queryClient.cancelQueries({ queryKey: ['vendor-orders', vendor?.id] });
       const prev = queryClient.getQueryData<any[]>(['vendor-orders', vendor?.id]) || [];
-      const next = prev.map((o) => o.id === orderId ? { ...o, delivery_status: 'approved' } : o);
+      // Optimistically leave status unchanged; assignment will reflect after RPC
+      const next = prev;
       queryClient.setQueryData(['vendor-orders', vendor?.id], next);
       return { prev } as { prev: any[] };
     },
@@ -637,44 +631,24 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
       console.log('vendor_reject_order RPC success for:', orderId);
     },
     onMutate: async (orderId: string) => {
-      // Add to hidden orders immediately (and persist)
-      persistHidden(Array.from(new Set([...(hiddenOrderIds || []), orderId])));
-      
-      // Get current order status for optimistic update
-      const currentOrders = queryClient.getQueryData<any[]>(['vendor-orders', vendor?.id]) || [];
-      const currentOrder = currentOrders.find(order => order.id === orderId);
-      const isPending = currentOrder?.delivery_status === 'pending';
-      
       await queryClient.cancelQueries({ queryKey: ['vendor-orders', vendor?.id] });
       const prevVendorOrders = queryClient.getQueryData<any[]>(['vendor-orders', vendor?.id]) || [];
       
-      if (isPending) {
-        // For pending orders, remove from list completely
-        const nextVendorOrders = prevVendorOrders.filter(order => order.id !== orderId);
-        queryClient.setQueryData(['vendor-orders', vendor?.id], nextVendorOrders);
-        
-        // Remove from all user orders
-        queryClient.setQueriesData({ queryKey: ['orders'] }, (oldData: any) => {
-          if (!oldData) return oldData;
-          return oldData.filter((order: any) => order.id !== orderId);
-        });
-      } else {
-        // For approved/assigned orders, update status to cancelled
-        const nextVendorOrders = prevVendorOrders.map(order => 
+      // Always mark as cancelled (never remove) - rejected orders should appear in history
+      const nextVendorOrders = prevVendorOrders.map(order => 
+        order.id === orderId ? { ...order, delivery_status: 'cancelled' } : order
+      );
+      queryClient.setQueryData(['vendor-orders', vendor?.id], nextVendorOrders);
+      
+      // Update order status in all user orders
+      queryClient.setQueriesData({ queryKey: ['orders'] }, (oldData: any) => {
+        if (!oldData) return oldData;
+        return oldData.map((order: any) => 
           order.id === orderId ? { ...order, delivery_status: 'cancelled' } : order
         );
-        queryClient.setQueryData(['vendor-orders', vendor?.id], nextVendorOrders);
-        
-        // Update order status in all user orders
-        queryClient.setQueriesData({ queryKey: ['orders'] }, (oldData: any) => {
-          if (!oldData) return oldData;
-          return oldData.map((order: any) => 
-            order.id === orderId ? { ...order, delivery_status: 'cancelled' } : order
-          );
-        });
-      }
+      });
       
-      return { prevVendorOrders, isPending };
+      return { prevVendorOrders };
     },
     onSuccess: (_, orderId) => {
       console.log('Order rejection successful, invalidating queries for order:', orderId);
@@ -703,22 +677,14 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
       if (context?.prevVendorOrders) {
         queryClient.setQueryData(['vendor-orders', vendor?.id], context.prevVendorOrders);
         
-        // If it was a pending order that we tried to delete, we need to restore it
-        if (context.isPending) {
-          // Restore the order in user orders as well
-          queryClient.setQueriesData({ queryKey: ['orders'] }, (oldData: any) => {
-            if (!oldData) return oldData;
-            // Find the order in the previous data and restore it
-            const restoredOrder = context.prevVendorOrders.find(order => order.id === orderId);
-            if (restoredOrder) {
-              return [...oldData, restoredOrder];
-            }
-            return oldData;
-          });
-        }
+        // Revert user orders as well
+        queryClient.setQueriesData({ queryKey: ['orders'] }, (oldData: any) => {
+          if (!oldData) return oldData;
+          return oldData.map((order: any) => 
+            order.id === orderId ? context.prevVendorOrders.find(o => o.id === orderId) || order : order
+          );
+        });
       }
-      // Remove from hidden orders if error occurred
-      persistHidden((hiddenOrderIds || []).filter(id => id !== orderId));
       toast.error(e?.message || 'Failed to reject order');
     },
   });
@@ -912,9 +878,18 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
     const live: any[] = [];
     const history: any[] = [];
     for (const o of list) {
-      const s = ((o as any).delivery_requests?.status || o.delivery_status) as string | null;
-      if (s === 'delivered' || s === 'cancelled') history.push(o);
-      else live.push(o);
+      const deliveryRequestStatus = (o as any).delivery_requests?.status as string | null;
+      const orderStatus = o.delivery_status as string | null;
+      
+      // Check both delivery_requests.status and orders.delivery_status for delivered/cancelled
+      const isDelivered = deliveryRequestStatus === 'delivered' || orderStatus === 'delivered';
+      const isCancelled = deliveryRequestStatus === 'cancelled' || orderStatus === 'cancelled';
+      
+      if (isDelivered || isCancelled) {
+        history.push(o);
+      } else {
+        live.push(o);
+      }
     }
     return { live, history };
   };
@@ -935,8 +910,10 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
         </Button>
       </div>
       {(view === 'live' ? liveOrders : historyOrders).filter((o) => !hiddenOrderIds.includes(o.id)).map((o) => {
-        const effectiveStatus = ((o as any).delivery_requests?.status || o.delivery_status) as string | null;
-        const delivered = effectiveStatus === 'delivered';
+        const deliveryRequestStatus = (o as any).delivery_requests?.status as string | null;
+        const orderStatus = o.delivery_status as string | null;
+        const effectiveStatus = deliveryRequestStatus || orderStatus;
+        const delivered = deliveryRequestStatus === 'delivered' || orderStatus === 'delivered';
         return (
         <div key={o.id} className={`p-3 sm:p-4 border rounded-md ${delivered ? 'border-green-500 bg-green-50' : ''}`}>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
