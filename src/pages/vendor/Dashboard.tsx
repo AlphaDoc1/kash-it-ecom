@@ -404,7 +404,8 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
       const { data: vendorProducts, error: productsError } = await supabase
         .from('products')
         .select('id')
-        .eq('vendor_id', vendor.id);
+        .eq('vendor_id', vendor.id)
+        // .eq('is_deleted', false) // Temporarily disabled until migration is applied;
       
       if (productsError) {
         console.error('Error fetching vendor products:', productsError);
@@ -1088,6 +1089,7 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
         .select('id, name, price, stock, unit, is_approved, image_url')
         .eq('vendor_id', vendor!.id)
         .eq('is_active', true)
+        // .eq('is_deleted', false) // Temporarily disabled until migration is applied
         .order('created_at', { ascending: false });
       if (error) throw error;
       return data as Array<{ id: string; name: string; price: number; stock: number; unit: string | null; is_approved: boolean | null; image_url: string | null }>;
@@ -1096,21 +1098,75 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
 
   const deleteProduct = useMutation({
     mutationFn: async (productId: string) => {
-      // Soft-delete: mark inactive so it disappears from the storefront immediately
+      // Get product details before deletion to handle file cleanup
+      const { data: product, error: fetchError } = await supabase
+        .from('products')
+        .select('image_url')
+        .eq('id', productId)
+        .eq('vendor_id', vendor!.id)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      // Use the new RPC function for soft deletion (temporarily disabled until migration)
+      // const { error } = await (supabase as any).rpc('vendor_delete_product', { 
+      //   p_product_id: productId 
+      // });
+      
+      // Temporary: use old deletion method until migration is applied
       const { error } = await supabase
         .from('products')
-        .update({ is_active: false as any })
+        .update({ is_active: false })
         .eq('id', productId)
         .eq('vendor_id', vendor!.id);
+      
       if (error) throw error;
+      
+      // Delete the image file from storage if it exists
+      if (product.image_url) {
+        try {
+          // Extract file path from the full URL
+          const url = new URL(product.image_url);
+          const filePath = url.pathname.substring(1); // Remove leading slash
+          
+          const { error: storageError } = await supabase.storage
+            .from('product-images')
+            .remove([filePath]);
+          
+          if (storageError) {
+            console.warn('Failed to delete image file:', storageError);
+            // Don't throw error here - product is already deleted, just log the warning
+          } else {
+            console.log('Successfully deleted image file:', filePath);
+          }
+        } catch (err) {
+          console.warn('Error processing image URL for deletion:', err);
+          // Don't throw error here - product is already deleted
+        }
+      }
     },
     onSuccess: () => {
-      toast.success('Product removed from storefront');
+      toast.success('Product deleted successfully');
+      console.log('Product deleted, invalidating queries...');
+      
       queryClient.invalidateQueries({ queryKey: ['vendor-products', vendor?.id] });
-      // Also refresh public product lists
+      
+      // Also refresh public product lists and admin lists
       queryClient.invalidateQueries({ predicate: (q) => Array.isArray(q.queryKey) && (
-        String(q.queryKey[0]).includes('products') || q.queryKey[0] === 'featured-products'
+        String(q.queryKey[0]).includes('products') || 
+        q.queryKey[0] === 'featured-products' ||
+        q.queryKey[0] === 'admin-all-products' ||
+        q.queryKey[0] === 'admin-vendor-products' ||
+        q.queryKey[0] === 'admin-vendors' ||
+        q.queryKey[0] === 'admin-products-count'
       ) });
+      
+      // Specifically invalidate admin-vendor-products queries with any parameters
+      queryClient.invalidateQueries({ 
+        predicate: (q) => Array.isArray(q.queryKey) && q.queryKey[0] === 'admin-vendor-products'
+      });
+      
+      console.log('All queries invalidated');
     },
     onError: (e: any) => toast.error(e?.message || 'Failed to delete product'),
   });

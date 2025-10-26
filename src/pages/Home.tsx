@@ -20,6 +20,7 @@ const Home = () => {
         .select('*, vendors(business_name), categories(name)')
         .eq('is_approved', true)
         .eq('is_active', true)
+        // .eq('is_deleted', false) // Temporarily disabled until migration is applied
         .limit(6);
       
       if (error) throw error;

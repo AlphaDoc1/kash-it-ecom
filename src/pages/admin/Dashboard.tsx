@@ -886,15 +886,20 @@ const DeliveryApplicationsActions = () => {
 
 const VendorsList = () => {
   const queryClient = useQueryClient();
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['admin-vendors'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('vendors')
-        .select('id, business_name, is_active, is_approved, profiles:profiles!inner(full_name)')
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data as any[]; 
+      try {
+        const { data, error } = await supabase
+          .from('vendors')
+          .select('id, business_name, is_active, is_approved, profiles(full_name)')
+          .order('created_at', { ascending: false });
+        if (error) throw error;
+        return data as any[]; 
+      } catch (err) {
+        console.error('Error fetching vendors:', err);
+        return [];
+      }
     },
   });
 
@@ -931,6 +936,13 @@ const VendorsList = () => {
     </CardContent>
   );
 
+  if (error) return (
+    <CardContent>
+      <CardHeader className="p-0 mb-4"><CardTitle className="text-lg sm:text-xl">Vendors</CardTitle></CardHeader>
+      <p className="text-sm text-red-600">Error loading vendors: {error.message}</p>
+    </CardContent>
+  );
+
   return (
     <CardContent>
       <CardHeader className="p-0 mb-4"><CardTitle className="text-lg sm:text-xl">Vendors</CardTitle></CardHeader>
@@ -960,17 +972,22 @@ const VendorProductsList = () => {
   });
 
   // Get vendor details for the selected vendor
-  const { data: selectedVendor } = useQuery({
+  const { data: selectedVendor, error: vendorError } = useQuery({
     queryKey: ['admin-vendor-details', selectedVendorId],
     queryFn: async () => {
       if (!selectedVendorId) return null;
-      const { data, error } = await supabase
-        .from('vendors')
-        .select('id, business_name, profiles!inner(full_name)')
-        .eq('id', selectedVendorId)
-        .single();
-      if (error) throw error;
-      return data;
+      try {
+        const { data, error } = await supabase
+          .from('vendors')
+          .select('id, business_name, profiles(full_name)')
+          .eq('id', selectedVendorId)
+          .single();
+        if (error) throw error;
+        return data;
+      } catch (err) {
+        console.error('Error fetching vendor details:', err);
+        return null;
+      }
     },
     enabled: !!selectedVendorId,
   });
@@ -1004,38 +1021,39 @@ const VendorProductsList = () => {
     };
   }, [selectedVendorId]);
 
-  const { data: products, isLoading, refetch } = useQuery({
+  const fetchVendorProducts = async (vendorId: string) => {
+    // @ts-ignore - Workaround for TypeScript deep instantiation issue
+    const { data, error } = await supabase
+      .from('products')
+      .select(`
+        *,
+        vendors!inner(
+          id,
+          business_name,
+          profiles!inner(full_name)
+        ),
+        categories(name)
+      `)
+      .eq('vendor_id', vendorId)
+      .eq('is_active', true)
+      // .eq('is_deleted', false); // Temporarily disabled until migration is applied
+    
+    if (error) throw error;
+    return data;
+  };
+
+  const { data: products, isLoading, refetch, error: productsError } = useQuery({
     queryKey: ['admin-vendor-products', selectedVendorId],
     queryFn: async () => {
       if (!selectedVendorId) return [];
       
-      const { data, error } = await supabase
-        .from('products')
-        .select(`
-          id, name, description, price, image_url, is_approved, is_active, created_at,
-          vendors!inner(id, business_name, profiles!inner(full_name)),
-          categories(name)
-        `)
-        .eq('vendor_id', selectedVendorId)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data as Array<{
-        id: string;
-        name: string;
-        description: string;
-        price: number;
-        image_url: string | null;
-        is_approved: boolean;
-        is_active: boolean;
-        created_at: string;
-        vendors: {
-          id: string;
-          business_name: string;
-          profiles: { full_name: string };
-        };
-        categories: { name: string } | null;
-      }>;
+      try {
+        const data = await fetchVendorProducts(selectedVendorId);
+        return data as any[];
+      } catch (err) {
+        console.error('Query error:', err);
+        return []; // Return empty array instead of throwing
+      }
     },
     enabled: !!selectedVendorId,
   });
@@ -1083,8 +1101,28 @@ const VendorProductsList = () => {
     );
   }
 
-  const pendingProducts = products?.filter(p => !p.is_approved) || [];
-  const approvedProducts = products?.filter(p => p.is_approved) || [];
+  if (productsError || vendorError) {
+    return (
+      <CardContent>
+        <CardHeader className="p-0 mb-4">
+          <CardTitle className="text-lg sm:text-xl">Vendor Products</CardTitle>
+        </CardHeader>
+        <div className="text-center py-8">
+          <p className="text-sm text-red-600 mb-2">Error loading products</p>
+          <p className="text-xs text-muted-foreground">
+            {productsError?.message || vendorError?.message || 'Unknown error'}
+          </p>
+        </div>
+      </CardContent>
+    );
+  }
+
+  // Debug logging
+  console.log('VendorProductsList - products:', products);
+  console.log('VendorProductsList - selectedVendorId:', selectedVendorId);
+  
+  const pendingProducts = products?.filter(p => p && typeof p === 'object' && !p.is_approved) || [];
+  const approvedProducts = products?.filter(p => p && typeof p === 'object' && p.is_approved) || [];
 
   return (
     <CardContent>
@@ -1092,9 +1130,9 @@ const VendorProductsList = () => {
         <CardHeader className="p-0">
           <CardTitle className="text-lg sm:text-xl">
             {selectedVendor ? `${selectedVendor.business_name} Products` : 'Vendor Products'}
-            {selectedVendor && (
+            {selectedVendor && selectedVendor.profiles && (
               <span className="text-sm font-normal text-muted-foreground ml-2">
-                (Owner: {selectedVendor.profiles.full_name})
+                (Owner: {selectedVendor.profiles.full_name || 'Unknown'})
               </span>
             )}
           </CardTitle>
@@ -1127,7 +1165,7 @@ const VendorProductsList = () => {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {pendingProducts.map((p) => (
+                {pendingProducts.filter(p => p).map((p) => (
                   <div key={p.id} className="bg-gradient-to-br from-orange-50 to-red-50 border border-orange-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                     {/* Product Image */}
                     <div className="aspect-square bg-white rounded-lg mb-3 overflow-hidden border">
@@ -1166,10 +1204,10 @@ const VendorProductsList = () => {
                     <div className="mt-3 p-2 bg-white/50 rounded-md">
                       <div className="text-xs text-gray-600 mb-1">Vendor Details</div>
                       <div className="text-sm font-medium text-gray-900">
-                        {p.vendors.business_name}
+                        {p.vendors?.business_name || 'Unknown Vendor'}
                       </div>
                       <div className="text-xs text-gray-600">
-                        Owner: {p.vendors.profiles.full_name}
+                        Owner: {p.vendors?.profiles?.full_name || 'Unknown Owner'}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
                         Submitted: {new Date(p.created_at).toLocaleDateString('en-IN')}
@@ -1212,7 +1250,7 @@ const VendorProductsList = () => {
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {approvedProducts.map((p) => (
+                {approvedProducts.filter(p => p).map((p) => (
                   <div key={p.id} className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                     {/* Product Image */}
                     <div className="aspect-square bg-white rounded-lg mb-3 overflow-hidden border">
@@ -1251,10 +1289,10 @@ const VendorProductsList = () => {
                     <div className="mt-3 p-2 bg-white/50 rounded-md">
                       <div className="text-xs text-gray-600 mb-1">Vendor</div>
                       <div className="text-sm font-medium text-gray-900">
-                        {p.vendors.business_name}
+                        {p.vendors?.business_name || 'Unknown Vendor'}
                       </div>
                       <div className="text-xs text-gray-600">
-                        Owner: {p.vendors.profiles.full_name}
+                        Owner: {p.vendors?.profiles?.full_name || 'Unknown Owner'}
                       </div>
                     </div>
 
@@ -1292,8 +1330,8 @@ const VendorProductsApproval = () => {
     queryKey: ['admin-all-products'],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from('products')
+      const { data, error } = await supabase
+        .from('products')
           .select(`
             id, 
             name, 
@@ -1309,7 +1347,9 @@ const VendorProductsApproval = () => {
               profiles!inner(full_name)
             )
           `)
-          .order('created_at', { ascending: false });
+          .eq('is_active', true)
+          // .eq('is_deleted', false) // Temporarily disabled until migration is applied
+        .order('created_at', { ascending: false });
         
         if (error) {
           console.error('Error fetching products:', error);
@@ -1420,7 +1460,7 @@ const VendorProductsApproval = () => {
                     {/* Product Image */}
                     <div className="flex gap-4 mb-4">
                       <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 shadow-sm">
-                        {p.image_url ? (
+                {p.image_url ? (
                           <img 
                             src={p.image_url} 
                             alt={p.name} 
@@ -1428,8 +1468,8 @@ const VendorProductsApproval = () => {
                           />
                         ) : (
                           <Package className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
-                        )}
-                      </div>
+                )}
+              </div>
                       
                       {/* Product Info */}
                       <div className="flex-1 min-w-0 space-y-2">
@@ -1439,7 +1479,7 @@ const VendorProductsApproval = () => {
                         <div className="space-y-1">
                           <div className="text-sm font-medium text-green-600">
                             ₹{p.price.toLocaleString()}
-                          </div>
+              </div>
                           <div className="text-xs text-gray-600">
                             Stock: {p.stock}{p.unit ? ` ${p.unit}` : ''}
                           </div>
@@ -1451,10 +1491,10 @@ const VendorProductsApproval = () => {
                     <div className="mb-4 p-3 bg-white/50 rounded-md">
                       <div className="text-xs text-gray-600 mb-1">Vendor Details</div>
                       <div className="text-sm font-medium text-gray-900">
-                        {p.vendors.business_name}
+                        {p.vendors?.business_name || 'Unknown Vendor'}
                       </div>
                       <div className="text-xs text-gray-600">
-                        Owner: {p.vendors.profiles.full_name}
+                        Owner: {p.vendors?.profiles?.full_name || 'Unknown Owner'}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">
                         Submitted: {new Date(p.created_at).toLocaleDateString('en-IN')}
@@ -1479,7 +1519,7 @@ const VendorProductsApproval = () => {
                           Approve Product
                         </div>
                       )}
-                    </Button>
+                </Button>
                   </div>
                 ))}
               </div>
@@ -1535,10 +1575,10 @@ const VendorProductsApproval = () => {
                     <div className="mb-4 p-3 bg-white/50 rounded-md">
                       <div className="text-xs text-gray-600 mb-1">Vendor</div>
                       <div className="text-sm font-medium text-gray-900">
-                        {p.vendors.business_name}
+                        {p.vendors?.business_name || 'Unknown Vendor'}
                       </div>
                       <div className="text-xs text-gray-600">
-                        Owner: {p.vendors.profiles.full_name}
+                        Owner: {p.vendors?.profiles?.full_name || 'Unknown Owner'}
                       </div>
                     </div>
 
@@ -1547,8 +1587,8 @@ const VendorProductsApproval = () => {
                       <Check className="h-4 w-4" />
                       Approved
                     </div>
-                  </div>
-                ))}
+            </div>
+          ))}
               </div>
             </div>
           )}

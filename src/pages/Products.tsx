@@ -46,7 +46,8 @@ const Products = () => {
         .from('products')
         .select('*, vendors(business_name), categories(name)')
         .eq('is_approved', true)
-        .eq('is_active', true);
+        .eq('is_active', true)
+        // .eq('is_deleted', false); // Temporarily disabled until migration is applied
 
       if (categoryFilter !== 'all') {
         query = query.eq('category_id', categoryFilter);
