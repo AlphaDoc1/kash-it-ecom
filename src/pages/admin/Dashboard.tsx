@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Users, Package, Store, Truck, Send, Ban, RefreshCcw, Check, Eye, UserCheck } from 'lucide-react';
+import { Users, Package, Store, Truck, Send, Ban, RefreshCcw, Check, Eye, UserCheck, Clock } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
@@ -84,7 +84,7 @@ const AdminDashboard = () => {
                 <VendorsList />
               </Card>
               <Card className="lg:col-span-2">
-                <VendorProductsApproval />
+                <VendorProductsList />
               </Card>
             </div>
             <Card>
@@ -917,6 +917,13 @@ const VendorsList = () => {
     queryClient.invalidateQueries({ queryKey: ['admin-vendor-products', selectedVendorId] });
   }, [selectedVendorId, queryClient]);
 
+  const handleVendorSelect = (vendorId: string) => {
+    setSelectedVendorId(vendorId);
+    localStorage.setItem('admin-selected-vendor', vendorId);
+    // Trigger a custom event to notify other components
+    window.dispatchEvent(new CustomEvent('vendorSelected', { detail: vendorId }));
+  };
+
   if (isLoading) return (
     <CardContent>
       <CardHeader className="p-0 mb-4"><CardTitle className="text-lg sm:text-xl">Vendors</CardTitle></CardHeader>
@@ -930,20 +937,350 @@ const VendorsList = () => {
       {!data || data.length === 0 ? (
         <p className="text-sm text-muted-foreground">No vendors found.</p>
       ) : (
-        <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+        <div className="space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
           {data.map((v) => (
             <button
               key={v.id}
               className={`w-full text-left p-2 sm:p-3 rounded border ${selectedVendorId === v.id ? 'border-primary bg-primary/5' : 'border-muted hover:border-primary/50'}`}
-              onClick={() => {
-                setSelectedVendorId(v.id);
-                localStorage.setItem('admin-selected-vendor', v.id);
-              }}
+              onClick={() => handleVendorSelect(v.id)}
             >
               <div className="font-semibold text-sm sm:text-base">{v.business_name}</div>
               <div className="text-xs text-muted-foreground">Owner: {v.profiles?.full_name || '-'}</div>
             </button>
           ))}
+        </div>
+      )}
+    </CardContent>
+  );
+};
+
+const VendorProductsList = () => {
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(() => {
+    return localStorage.getItem('admin-selected-vendor');
+  });
+
+  // Get vendor details for the selected vendor
+  const { data: selectedVendor } = useQuery({
+    queryKey: ['admin-vendor-details', selectedVendorId],
+    queryFn: async () => {
+      if (!selectedVendorId) return null;
+      const { data, error } = await supabase
+        .from('vendors')
+        .select('id, business_name, profiles!inner(full_name)')
+        .eq('id', selectedVendorId)
+        .single();
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!selectedVendorId,
+  });
+
+  // Listen for changes in localStorage to update selected vendor
+  useEffect(() => {
+    const handleStorageChange = () => {
+      const stored = localStorage.getItem('admin-selected-vendor');
+      if (stored !== selectedVendorId) {
+        setSelectedVendorId(stored);
+      }
+    };
+
+    const handleVendorSelected = (event: CustomEvent) => {
+      setSelectedVendorId(event.detail);
+    };
+
+    // Listen for storage events
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Listen for custom vendor selection events
+    window.addEventListener('vendorSelected', handleVendorSelected as EventListener);
+    
+    // Also check periodically for changes (in case of same-tab updates)
+    const interval = setInterval(handleStorageChange, 100);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('vendorSelected', handleVendorSelected as EventListener);
+      clearInterval(interval);
+    };
+  }, [selectedVendorId]);
+
+  const { data: products, isLoading, refetch } = useQuery({
+    queryKey: ['admin-vendor-products', selectedVendorId],
+    queryFn: async () => {
+      if (!selectedVendorId) return [];
+      
+      const { data, error } = await supabase
+        .from('products')
+        .select(`
+          id, name, description, price, image_url, is_approved, is_active, created_at,
+          vendors!inner(id, business_name, profiles!inner(full_name)),
+          categories(name)
+        `)
+        .eq('vendor_id', selectedVendorId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as Array<{
+        id: string;
+        name: string;
+        description: string;
+        price: number;
+        image_url: string | null;
+        is_approved: boolean;
+        is_active: boolean;
+        created_at: string;
+        vendors: {
+          id: string;
+          business_name: string;
+          profiles: { full_name: string };
+        };
+        categories: { name: string } | null;
+      }>;
+    },
+    enabled: !!selectedVendorId,
+  });
+
+  const queryClient = useQueryClient();
+  const approveMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const { error } = await supabase
+        .from('products')
+        .update({ is_approved: true })
+        .eq('id', productId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-vendor-products', selectedVendorId] });
+      toast.success('Product approved successfully');
+    },
+    onError: (e: any) => toast.error(e?.message || 'Failed to approve product'),
+  });
+
+  if (!selectedVendorId) {
+    return (
+      <CardContent>
+        <CardHeader className="p-0 mb-4">
+          <CardTitle className="text-lg sm:text-xl">Vendor Products</CardTitle>
+        </CardHeader>
+        <div className="text-center py-8">
+          <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Select a vendor to view their products</p>
+        </div>
+      </CardContent>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <CardContent>
+        <CardHeader className="p-0 mb-4">
+          <CardTitle className="text-lg sm:text-xl">Vendor Products</CardTitle>
+        </CardHeader>
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </CardContent>
+    );
+  }
+
+  const pendingProducts = products?.filter(p => !p.is_approved) || [];
+  const approvedProducts = products?.filter(p => p.is_approved) || [];
+
+  return (
+    <CardContent>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
+        <CardHeader className="p-0">
+          <CardTitle className="text-lg sm:text-xl">
+            {selectedVendor ? `${selectedVendor.business_name} Products` : 'Vendor Products'}
+            {selectedVendor && (
+              <span className="text-sm font-normal text-muted-foreground ml-2">
+                (Owner: {selectedVendor.profiles.full_name})
+              </span>
+            )}
+          </CardTitle>
+        </CardHeader>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto">
+          <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
+        </Button>
+      </div>
+
+      {!products || products.length === 0 ? (
+        <div className="text-center py-8">
+          <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">
+            {selectedVendor 
+              ? `No products found for ${selectedVendor.business_name}` 
+              : 'Select a vendor to view their products'
+            }
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-6 max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-2">
+          {/* Pending Products Section */}
+          {pendingProducts.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge variant="destructive" className="text-xs sm:text-sm">
+                  <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                  Pending Approval ({pendingProducts.length})
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {pendingProducts.map((p) => (
+                  <div key={p.id} className="bg-gradient-to-br from-orange-50 to-red-50 border border-orange-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    {/* Product Image */}
+                    <div className="aspect-square bg-white rounded-lg mb-3 overflow-hidden border">
+                      {p.image_url ? (
+                        <img 
+                          src={p.image_url} 
+                          alt={p.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                          <Package className="h-8 w-8" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Product Info */}
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-sm sm:text-base text-gray-900 line-clamp-2">
+                        {p.name}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">
+                        {p.description}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-bold text-green-600">
+                          ₹{p.price.toFixed(2)}
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {p.categories?.name || 'Uncategorized'}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Vendor Details */}
+                    <div className="mt-3 p-2 bg-white/50 rounded-md">
+                      <div className="text-xs text-gray-600 mb-1">Vendor Details</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {p.vendors.business_name}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        Owner: {p.vendors.profiles.full_name}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Submitted: {new Date(p.created_at).toLocaleDateString('en-IN')}
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <Button 
+                      size="sm" 
+                      onClick={() => approveMutation.mutate(p.id)} 
+                      disabled={approveMutation.isPending} 
+                      className="w-full mt-3 bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {approveMutation.isPending ? (
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                          Approving...
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Check className="h-4 w-4" /> 
+                          Approve Product
+                        </div>
+                      )}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Approved Products Section */}
+          {approvedProducts.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Badge variant="default" className="text-xs sm:text-sm">
+                  <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1" />
+                  Approved Products ({approvedProducts.length})
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                {approvedProducts.map((p) => (
+                  <div key={p.id} className="bg-gradient-to-br from-green-50 to-emerald-50 border border-green-200 rounded-lg p-4 hover:shadow-md transition-shadow">
+                    {/* Product Image */}
+                    <div className="aspect-square bg-white rounded-lg mb-3 overflow-hidden border">
+                      {p.image_url ? (
+                        <img 
+                          src={p.image_url} 
+                          alt={p.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                          <Package className="h-8 w-8" />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Product Info */}
+                    <div className="space-y-2">
+                      <h3 className="font-semibold text-sm sm:text-base text-gray-900 line-clamp-2">
+                        {p.name}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-gray-600 line-clamp-2">
+                        {p.description}
+                      </p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-lg font-bold text-green-600">
+                          ₹{p.price.toFixed(2)}
+                        </span>
+                        <Badge variant="outline" className="text-xs">
+                          {p.categories?.name || 'Uncategorized'}
+                        </Badge>
+                      </div>
+                    </div>
+
+                    {/* Vendor Details */}
+                    <div className="mt-3 p-2 bg-white/50 rounded-md">
+                      <div className="text-xs text-gray-600 mb-1">Vendor</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {p.vendors.business_name}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        Owner: {p.vendors.profiles.full_name}
+                      </div>
+                    </div>
+
+                    {/* Approved Badge */}
+                    <div className="flex items-center justify-center gap-2 text-green-600 font-medium text-sm mt-3">
+                      <Check className="h-4 w-4" />
+                      Approved
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {pendingProducts.length === 0 && approvedProducts.length === 0 && (
+            <div className="text-center py-8">
+              <Package className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-sm text-muted-foreground">
+                {selectedVendor 
+                  ? `No products found for ${selectedVendor.business_name}` 
+                  : 'No products found for this vendor'
+                }
+              </p>
+            </div>
+          )}
         </div>
       )}
     </CardContent>
