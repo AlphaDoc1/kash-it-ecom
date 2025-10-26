@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,6 +14,7 @@ const Checkout = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'online'>('cod');
+  const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
 
   const { data: cartItems } = useQuery({
     queryKey: ['cart', user?.id],
@@ -36,12 +37,22 @@ const Checkout = () => {
       const { data, error } = await supabase
         .from('addresses')
         .select('*')
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .order('is_default', { ascending: false })
+        .order('created_at', { ascending: false });
       if (error) throw error;
       return data;
     },
     enabled: !!user,
   });
+
+  // Set default address when addresses load
+  useEffect(() => {
+    if (addresses && addresses.length > 0 && !selectedAddressId) {
+      const defaultAddress = addresses.find((a: any) => a.is_default) || addresses[0];
+      setSelectedAddressId(defaultAddress.id);
+    }
+  }, [addresses, selectedAddressId]);
 
   const subtotal = cartItems?.reduce((sum, item) => sum + (item.products.price * item.quantity), 0) || 0;
 
@@ -51,13 +62,15 @@ const Checkout = () => {
       if (!cartItems || cartItems.length === 0) throw new Error('Cart empty');
       if (!addresses || addresses.length === 0) throw new Error('No address');
 
-      const defaultAddress = addresses.find((a: any) => a.is_default) || addresses[0];
+      const selectedAddress = addresses.find((a: any) => a.id === selectedAddressId);
+      if (!selectedAddress) throw new Error('No address selected');
+      
       console.log('Available addresses:', addresses);
-      console.log('Selected address for order:', defaultAddress);
+      console.log('Selected address for order:', selectedAddress);
       
       const orderPayload = {
         user_id: user.id,
-        address_id: defaultAddress.id,
+        address_id: selectedAddress.id,
         subtotal: Number(subtotal.toFixed(2)),
         discount_amount: 0,
         final_amount: Number(subtotal.toFixed(2)),
@@ -134,11 +147,41 @@ const Checkout = () => {
               {addresses && addresses.length > 0 ? (
                 <div className="space-y-2 sm:space-y-3">
                   {addresses.map((addr) => (
-                    <div key={addr.id} className="p-3 sm:p-4 border rounded-lg">
-                      <p className="font-semibold text-sm sm:text-base">{addr.label}</p>
-                      <p className="text-xs sm:text-sm text-muted-foreground break-words">{addr.full_address}</p>
-                      <p className="text-xs sm:text-sm text-muted-foreground">{addr.city}, {addr.state} - {addr.pincode}</p>
-                      <p className="text-xs sm:text-sm text-muted-foreground">Phone: {addr.phone}</p>
+                    <div 
+                      key={addr.id} 
+                      className={`p-3 sm:p-4 border rounded-lg cursor-pointer transition-all duration-200 ${
+                        selectedAddressId === addr.id 
+                          ? 'border-primary bg-primary/5 ring-2 ring-primary/20' 
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                      onClick={() => setSelectedAddressId(addr.id)}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="font-semibold text-sm sm:text-base">{addr.label}</p>
+                            {addr.is_default && (
+                              <span className="text-xs bg-primary text-primary-foreground px-2 py-1 rounded-full">
+                                Default
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs sm:text-sm text-muted-foreground break-words">{addr.full_address}</p>
+                          <p className="text-xs sm:text-sm text-muted-foreground">{addr.city}, {addr.state} - {addr.pincode}</p>
+                          <p className="text-xs sm:text-sm text-muted-foreground">Phone: {addr.phone}</p>
+                        </div>
+                        <div className="ml-2">
+                          <div className={`w-4 h-4 rounded-full border-2 ${
+                            selectedAddressId === addr.id 
+                              ? 'border-primary bg-primary' 
+                              : 'border-gray-300'
+                          }`}>
+                            {selectedAddressId === addr.id && (
+                              <div className="w-full h-full rounded-full bg-white scale-50"></div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>

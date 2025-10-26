@@ -75,15 +75,44 @@ const DeliveryPartnerLocationCard = () => {
       if (!partner?.id) throw new Error('Partner profile not found');
       const pos = await getCurrentPosition();
       if (!pos) throw new Error('Unable to get current location');
+      
+      // Update delivery partner location
       const { error } = await supabase
         .from('delivery_partners')
         .update({ latitude: pos.lat, longitude: pos.lon })
         .eq('id', partner.id);
       if (error) throw error;
+
+      // Also update tracking for any active deliveries
+      const { data: activeDeliveries } = await supabase
+        .from('delivery_requests')
+        .select('order_id')
+        .eq('assigned_partner_id', partner.id)
+        .in('status', ['accepted', 'picked_up', 'out_for_delivery']);
+
+      if (activeDeliveries && activeDeliveries.length > 0) {
+        const trackingInserts = activeDeliveries.map(delivery => ({
+          order_id: delivery.order_id,
+          partner_id: partner.id,
+          latitude: pos.lat,
+          longitude: pos.lon,
+        }));
+
+        const { error: trackingError } = await supabase
+          .from('delivery_tracking')
+          .insert(trackingInserts);
+        
+        if (trackingError) {
+          console.warn('Failed to update tracking:', trackingError);
+        }
+      }
     },
     onSuccess: () => {
       toast.success('Location updated');
       queryClient.invalidateQueries({ queryKey: ['delivery-partner-location', user?.id] });
+      // Also invalidate order details queries to update maps
+      queryClient.invalidateQueries({ queryKey: ['order-details'] });
+      queryClient.invalidateQueries({ queryKey: ['delivery-tracking'] });
     },
     onError: (e: any) => toast.error(e?.message || 'Failed to set location'),
   });
@@ -150,11 +179,34 @@ const AssignedRequests = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('delivery_requests')
-        .select('*, orders(delivery_status)')
+        .select('*, orders(delivery_status, id)')
         .eq('assigned_partner_id', partner!.id)
         .order('created_at', { ascending: false });
       if (error) throw error;
-      return data as any[];
+      
+      // Get order visibility for this delivery partner to filter out hidden orders
+      const orderIds = data?.map(r => r.order_id) || [];
+      if (orderIds.length === 0) return [];
+      
+      const { data: visibilityData, error: visibilityError } = await supabase
+        .from('order_visibility')
+        .select('order_id, is_visible')
+        .eq('user_id', user!.id)
+        .eq('user_type', 'delivery_partner')
+        .in('order_id', orderIds);
+      
+      if (visibilityError) {
+        console.error('Error fetching order visibility:', visibilityError);
+      }
+      
+      // Filter out hidden orders
+      const hiddenOrderIds = new Set(
+        visibilityData?.filter(v => !v.is_visible).map(v => v.order_id) || []
+      );
+      
+      const visibleRequests = data?.filter(r => !hiddenOrderIds.has(r.order_id)) || [];
+      
+      return visibleRequests as any[];
     },
   });
 
@@ -191,14 +243,24 @@ const AssignedRequests = () => {
   }, [partner?.id, queryClient]);
   const removeFromDashboard = async (requestId: string) => {
     try {
-      const { error } = await supabase
+      // Get the order_id from the delivery request
+      const { data: request, error: fetchError } = await supabase
         .from('delivery_requests')
-        .delete()
-        .eq('id', requestId);
+        .select('order_id')
+        .eq('id', requestId)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      // Hide order from delivery partner's history using RPC
+      const { error } = await (supabase as any).rpc('delivery_delete_order', { 
+        p_order_id: request.order_id 
+      });
+      
       if (error) throw error;
-      toast.success('Removed from dashboard');
+      toast.success('Order removed from your history');
     } catch (e: any) {
-      // Likely blocked by RLS: hide locally so dashboard is cleaned
+      // Fallback: hide locally so dashboard is cleaned
       toast('Removed locally');
     } finally {
       const next = Array.from(new Set([...(hiddenRequestIds || []), requestId]));

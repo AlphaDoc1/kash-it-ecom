@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Users, Package, Store, Truck, Send, Ban, RefreshCcw, Check, Eye, UserCheck } from 'lucide-react';
@@ -35,21 +36,37 @@ const AdminDashboard = () => {
         <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-4 sm:mb-8">Admin Dashboard</h1>
 
         {/* Statistics Cards */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4 mb-4 sm:mb-8">
-          <StatsCard title="Users" icon={<Users className="h-4 w-4" />} queryKey="admin-users-count" />
-          <StatsCard title="Products" icon={<Package className="h-4 w-4" />} queryKey="admin-products-count" />
-          <StatsCard title="Vendors" icon={<Store className="h-4 w-4" />} queryKey="admin-vendors-count" />
-          <StatsCard title="Orders" icon={<Truck className="h-4 w-4" />} queryKey="admin-orders-count" />
-          <StatsCard title="Delivery Partners" icon={<UserCheck className="h-4 w-4" />} queryKey="admin-delivery-count" />
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 mb-6 sm:mb-8">
+          <StatsCard title="Users" icon={<Users className="h-4 w-4 sm:h-5 sm:w-5" />} queryKey="admin-users-count" />
+          <StatsCard title="Products" icon={<Package className="h-4 w-4 sm:h-5 sm:w-5" />} queryKey="admin-products-count" />
+          <StatsCard title="Vendors" icon={<Store className="h-4 w-4 sm:h-5 sm:w-5" />} queryKey="admin-vendors-count" />
+          <StatsCard title="Orders" icon={<Truck className="h-4 w-4 sm:h-5 sm:w-5" />} queryKey="admin-orders-count" />
+          <StatsCard title="Delivery Partners" icon={<UserCheck className="h-4 w-4 sm:h-5 sm:w-5" />} queryKey="admin-delivery-count" />
         </div>
 
         <Tabs defaultValue="vendors" className="w-full">
-          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-            <TabsList className="grid w-full grid-cols-4 min-w-[400px]">
-              <TabsTrigger value="vendors" className="text-xs sm:text-sm">Vendors</TabsTrigger>
-              <TabsTrigger value="delivery" className="text-xs sm:text-sm">Delivery</TabsTrigger>
-              <TabsTrigger value="products" className="text-xs sm:text-sm">Products</TabsTrigger>
-              <TabsTrigger value="orders" className="text-xs sm:text-sm">Orders</TabsTrigger>
+          <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 mb-6">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 min-w-[300px] sm:min-w-[500px]">
+              <TabsTrigger value="vendors" className="text-xs sm:text-sm px-2 sm:px-4">
+                <Store className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Vendors</span>
+                <span className="sm:hidden">Vendors</span>
+              </TabsTrigger>
+              <TabsTrigger value="delivery" className="text-xs sm:text-sm px-2 sm:px-4">
+                <Truck className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Delivery</span>
+                <span className="sm:hidden">Delivery</span>
+              </TabsTrigger>
+              <TabsTrigger value="products" className="text-xs sm:text-sm px-2 sm:px-4">
+                <Package className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Products</span>
+                <span className="sm:hidden">Products</span>
+              </TabsTrigger>
+              <TabsTrigger value="orders" className="text-xs sm:text-sm px-2 sm:px-4">
+                <Truck className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Orders</span>
+                <span className="sm:hidden">Orders</span>
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -934,23 +951,54 @@ const VendorsList = () => {
 };
 
 const VendorProductsApproval = () => {
-  const [vendorId, setVendorId] = useState<string | null>(null);
-
-  useEffect(() => {
-    setVendorId(localStorage.getItem('admin-selected-vendor'));
-  }, []);
-
   const { data: products, isLoading, refetch } = useQuery({
-    queryKey: ['admin-vendor-products', vendorId],
-    enabled: !!vendorId,
+    queryKey: ['admin-all-products'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('products')
-        .select('id, name, price, stock, unit, image_url, is_approved')
-        .eq('vendor_id', vendorId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      return data as Array<{ id: string; name: string; price: number; stock: number; unit: string | null; image_url: string | null; is_approved: boolean | null }>;
+      try {
+        const { data, error } = await supabase
+          .from('products')
+          .select(`
+            id, 
+            name, 
+            price, 
+            stock, 
+            unit, 
+            image_url, 
+            is_approved,
+            created_at,
+            vendors!inner(
+              id,
+              business_name,
+              profiles!inner(full_name)
+            )
+          `)
+          .order('created_at', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching products:', error);
+          throw error;
+        }
+        
+        console.log('Fetched products:', data);
+        return data as Array<{ 
+          id: string; 
+          name: string; 
+          price: number; 
+          stock: number; 
+          unit: string | null; 
+          image_url: string | null; 
+          is_approved: boolean | null;
+          created_at: string;
+          vendors: { 
+            id: string; 
+            business_name: string; 
+            profiles: { full_name: string } 
+          } 
+        }>;
+      } catch (err) {
+        console.error('Query error:', err);
+        throw err;
+      }
     },
   });
 
@@ -965,53 +1013,219 @@ const VendorProductsApproval = () => {
       return { ok: true } as const;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin-vendor-products', vendorId] });
+      queryClient.invalidateQueries({ queryKey: ['admin-all-products'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-vendor-products'] });
+      queryClient.invalidateQueries({ queryKey: ['products'] });
+      queryClient.invalidateQueries({ queryKey: ['featured-products'] });
       toast.success('Product approved');
     },
     onError: (err: any) => toast.error(err?.message || 'Failed to approve'),
   });
 
+  const pendingProducts = products?.filter(p => !p.is_approved) || [];
+  const approvedProducts = products?.filter(p => p.is_approved) || [];
+
+  console.log('VendorProductsApproval render:', { products, isLoading, pendingProducts, approvedProducts });
+
   return (
-    <CardContent>
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-2">
-        <CardHeader className="p-0">
-          <CardTitle className="text-lg sm:text-xl flex items-center gap-2"><Eye className="h-4 w-4 sm:h-5 sm:w-5 text-primary" /> Vendor Products</CardTitle>
-        </CardHeader>
+    <CardContent className="p-4 sm:p-6">
+      {/* Header Section */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between mb-6 gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+          <CardTitle className="text-xl sm:text-2xl flex items-center gap-2">
+            <Eye className="h-5 w-5 sm:h-6 sm:w-6 text-primary" /> 
+            Product Approval
+          </CardTitle>
+          <div className="flex gap-2">
+            <Badge variant="secondary" className="text-xs sm:text-sm">
+              {pendingProducts.length} Pending
+            </Badge>
+            <Badge variant="outline" className="text-xs sm:text-sm">
+              {approvedProducts.length} Approved
+            </Badge>
+          </div>
+        </div>
         <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto">
           <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
         </Button>
       </div>
 
-      {!vendorId ? (
-        <p className="text-sm text-muted-foreground">Select a vendor to view products.</p>
-      ) : isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading…</p>
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-2"></div>
+            <p className="text-sm text-muted-foreground">Loading products...</p>
+          </div>
+        </div>
       ) : !products || products.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No products found for this vendor.</p>
+        <div className="text-center py-12">
+          <Package className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-sm text-muted-foreground">No products found.</p>
+          <p className="text-xs text-muted-foreground mt-1">Vendors need to add products first.</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-          {products.map((p) => (
-            <div key={p.id} className="p-3 sm:p-4 border rounded-md flex gap-3 items-center">
-              <div className="w-12 h-12 sm:w-16 sm:h-16 bg-muted rounded overflow-hidden flex items-center justify-center flex-shrink-0">
-                {p.image_url ? (
-                  <img src={p.image_url} alt={p.name} className="object-cover w-full h-full" />
-                ) : (
-                  <Package className="h-4 w-4 sm:h-6 sm:w-6 text-muted-foreground" />
-                )}
+        <div className="space-y-8">
+          {/* Pending Products Section */}
+          {pendingProducts.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg sm:text-xl font-semibold text-yellow-700">
+                  Pending Approval
+                </h3>
+                <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                  {pendingProducts.length}
+                </Badge>
               </div>
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-sm sm:text-base truncate">{p.name}</div>
-                <div className="text-xs sm:text-sm text-muted-foreground">₹{p.price} • Stock {p.stock}{p.unit ? ` ${p.unit}` : ''}</div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+                {pendingProducts.map((p) => (
+                  <div key={p.id} className="group relative p-4 sm:p-5 border border-yellow-200 rounded-lg bg-gradient-to-br from-yellow-50 to-yellow-100 hover:shadow-md transition-all duration-200">
+                    {/* Product Image */}
+                    <div className="flex gap-4 mb-4">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 shadow-sm">
+                        {p.image_url ? (
+                          <img 
+                            src={p.image_url} 
+                            alt={p.name} 
+                            className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-200" 
+                          />
+                        ) : (
+                          <Package className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+                        )}
+                      </div>
+                      
+                      {/* Product Info */}
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <h4 className="font-semibold text-sm sm:text-base text-gray-900 truncate">
+                          {p.name}
+                        </h4>
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-green-600">
+                            ₹{p.price.toLocaleString()}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            Stock: {p.stock}{p.unit ? ` ${p.unit}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Vendor Info */}
+                    <div className="mb-4 p-3 bg-white/50 rounded-md">
+                      <div className="text-xs text-gray-600 mb-1">Vendor Details</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {p.vendors.business_name}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        Owner: {p.vendors.profiles.full_name}
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        Submitted: {new Date(p.created_at).toLocaleDateString('en-IN')}
+                      </div>
+                    </div>
+
+                    {/* Action Button */}
+                    <Button 
+                      size="sm" 
+                      onClick={() => approveMutation.mutate(p.id)} 
+                      disabled={approveMutation.isPending} 
+                      className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {approveMutation.isPending ? (
+                        <div className="flex items-center gap-2">
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                          Approving...
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <Check className="h-4 w-4" /> 
+                          Approve Product
+                        </div>
+                      )}
+                    </Button>
+                  </div>
+                ))}
               </div>
-              {p.is_approved ? (
-                <span className="text-xs text-green-600 flex-shrink-0">Approved</span>
-              ) : (
-                <Button size="sm" onClick={() => approveMutation.mutate(p.id)} disabled={approveMutation.isPending} className="text-xs flex-shrink-0">
-                  <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> Approve
-                </Button>
-              )}
             </div>
-          ))}
+          )}
+
+          {/* Approved Products Section */}
+          {approvedProducts.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg sm:text-xl font-semibold text-green-700">
+                  Recently Approved
+                </h3>
+                <Badge variant="secondary" className="bg-green-100 text-green-800">
+                  {approvedProducts.length}
+                </Badge>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 sm:gap-6">
+                {approvedProducts.slice(0, 12).map((p) => (
+                  <div key={p.id} className="group relative p-4 sm:p-5 border border-green-200 rounded-lg bg-gradient-to-br from-green-50 to-green-100 hover:shadow-md transition-all duration-200">
+                    {/* Product Image */}
+                    <div className="flex gap-4 mb-4">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white rounded-lg overflow-hidden flex items-center justify-center flex-shrink-0 shadow-sm">
+                        {p.image_url ? (
+                          <img 
+                            src={p.image_url} 
+                            alt={p.name} 
+                            className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-200" 
+                          />
+                        ) : (
+                          <Package className="h-6 w-6 sm:h-8 sm:w-8 text-muted-foreground" />
+                        )}
+                      </div>
+                      
+                      {/* Product Info */}
+                      <div className="flex-1 min-w-0 space-y-2">
+                        <h4 className="font-semibold text-sm sm:text-base text-gray-900 truncate">
+                          {p.name}
+                        </h4>
+                        <div className="space-y-1">
+                          <div className="text-sm font-medium text-green-600">
+                            ₹{p.price.toLocaleString()}
+                          </div>
+                          <div className="text-xs text-gray-600">
+                            Stock: {p.stock}{p.unit ? ` ${p.unit}` : ''}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Vendor Info */}
+                    <div className="mb-4 p-3 bg-white/50 rounded-md">
+                      <div className="text-xs text-gray-600 mb-1">Vendor</div>
+                      <div className="text-sm font-medium text-gray-900">
+                        {p.vendors.business_name}
+                      </div>
+                      <div className="text-xs text-gray-600">
+                        Owner: {p.vendors.profiles.full_name}
+                      </div>
+                    </div>
+
+                    {/* Approved Badge */}
+                    <div className="flex items-center justify-center gap-2 text-green-600 font-medium text-sm">
+                      <Check className="h-4 w-4" />
+                      Approved
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Empty State */}
+          {pendingProducts.length === 0 && approvedProducts.length === 0 && (
+            <div className="text-center py-16">
+              <Package className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Products Found</h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                Vendors need to add products first. Once they submit products, they will appear here for approval.
+              </p>
+            </div>
+          )}
         </div>
       )}
     </CardContent>

@@ -105,9 +105,9 @@ const Home = () => {
         <section className="py-6 sm:py-8 md:py-12 px-4 bg-background">
           <div className="container mx-auto">
             <h2 className="text-2xl sm:text-3xl font-bold text-center mb-6 sm:mb-8">Quick Actions</h2>
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
-              <Link to="/products" className="group">
-                <Card className="text-center border-none shadow-md hover:shadow-lg transition-shadow group-hover:scale-105">
+            <div className="flex flex-wrap justify-center gap-3 sm:gap-4 lg:gap-6 max-w-4xl mx-auto">
+              <Link to="/products" className="group flex-1 min-w-[140px] max-w-[200px]">
+                <Card className="text-center border-none shadow-md hover:shadow-lg transition-shadow group-hover:scale-105 h-full">
                   <CardContent className="p-4 sm:p-6">
                     <ShoppingBag className="h-8 w-8 sm:h-10 sm:w-10 text-primary mx-auto mb-3" />
                     <h3 className="font-semibold text-sm sm:text-base mb-2">Browse Products</h3>
@@ -116,8 +116,8 @@ const Home = () => {
                 </Card>
               </Link>
               
-              <Link to="/orders" className="group">
-                <Card className="text-center border-none shadow-md hover:shadow-lg transition-shadow group-hover:scale-105">
+              <Link to="/orders" className="group flex-1 min-w-[140px] max-w-[200px]">
+                <Card className="text-center border-none shadow-md hover:shadow-lg transition-shadow group-hover:scale-105 h-full">
                   <CardContent className="p-4 sm:p-6">
                     <Package className="h-8 w-8 sm:h-10 sm:w-10 text-primary mx-auto mb-3" />
                     <h3 className="font-semibold text-sm sm:text-base mb-2">My Orders</h3>
@@ -126,8 +126,8 @@ const Home = () => {
                 </Card>
               </Link>
               
-              <Link to="/cart" className="group">
-                <Card className="text-center border-none shadow-md hover:shadow-lg transition-shadow group-hover:scale-105">
+              <Link to="/cart" className="group flex-1 min-w-[140px] max-w-[200px]">
+                <Card className="text-center border-none shadow-md hover:shadow-lg transition-shadow group-hover:scale-105 h-full">
                   <CardContent className="p-4 sm:p-6">
                     <ShoppingCart className="h-8 w-8 sm:h-10 sm:w-10 text-primary mx-auto mb-3" />
                     <h3 className="font-semibold text-sm sm:text-base mb-2">Shopping Cart</h3>
@@ -137,8 +137,8 @@ const Home = () => {
               </Link>
               
               {(isAdmin || isVendor || isDelivery) && (
-                <Link to={isAdmin ? "/admin" : isVendor ? "/vendor" : "/delivery"} className="group">
-                  <Card className="text-center border-none shadow-md hover:shadow-lg transition-shadow group-hover:scale-105">
+                <Link to={isAdmin ? "/admin" : isVendor ? "/vendor" : "/delivery"} className="group flex-1 min-w-[140px] max-w-[200px]">
+                  <Card className="text-center border-none shadow-md hover:shadow-lg transition-shadow group-hover:scale-105 h-full">
                     <CardContent className="p-4 sm:p-6">
                       <User className="h-8 w-8 sm:h-10 sm:w-10 text-primary mx-auto mb-3" />
                       <h3 className="font-semibold text-sm sm:text-base mb-2">Dashboard</h3>

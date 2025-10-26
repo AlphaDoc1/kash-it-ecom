@@ -6,8 +6,10 @@ export type LatLng = { lat: number; lon: number };
 export const LiveMap = ({ center, partner, height = 220 }: { center?: LatLng; partner?: LatLng | null; height?: number }) => {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const instRef = useRef<L.Map | null>(null);
-  const markerRef = useRef<L.Marker | null>(null);
+  const centerMarkerRef = useRef<L.Marker | null>(null);
+  const partnerMarkerRef = useRef<L.Marker | null>(null);
 
+  // Initialize map
   useEffect(() => {
     if (!mapRef.current || instRef.current) return;
     const m = L.map(mapRef.current).setView([center?.lat || 20.5937, center?.lon || 78.9629], center ? 14 : 5);
@@ -16,11 +18,13 @@ export const LiveMap = ({ center, partner, height = 220 }: { center?: LatLng; pa
       maxZoom: 19,
     }).addTo(m);
     instRef.current = m;
-  }, [center]);
+  }, []);
 
+  // Update center marker (user location)
   useEffect(() => {
     if (!instRef.current) return;
-    const defaultIcon = L.icon({
+    
+    const userIcon = L.icon({
       iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
       iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
       shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
@@ -30,15 +34,69 @@ export const LiveMap = ({ center, partner, height = 220 }: { center?: LatLng; pa
       tooltipAnchor: [16, -28],
       shadowSize: [41, 41],
     });
-    if (partner?.lat && partner?.lon) {
-      if (!markerRef.current) {
-        markerRef.current = L.marker([partner.lat, partner.lon], { icon: defaultIcon }).addTo(instRef.current);
+
+    if (center?.lat && center?.lon) {
+      if (!centerMarkerRef.current) {
+        centerMarkerRef.current = L.marker([center.lat, center.lon], { 
+          icon: userIcon 
+        }).addTo(instRef.current);
+        centerMarkerRef.current.bindPopup('📍 Your Location').openPopup();
       } else {
-        markerRef.current.setLatLng([partner.lat, partner.lon]);
+        centerMarkerRef.current.setLatLng([center.lat, center.lon]);
       }
-      instRef.current.setView([partner.lat, partner.lon], 15);
+    } else if (centerMarkerRef.current) {
+      instRef.current.removeLayer(centerMarkerRef.current);
+      centerMarkerRef.current = null;
+    }
+  }, [center]);
+
+  // Update partner marker (delivery partner location)
+  useEffect(() => {
+    if (!instRef.current) return;
+    
+    const partnerIcon = L.icon({
+      iconUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png',
+      iconRetinaUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png',
+      shadowUrl: 'https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png',
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      tooltipAnchor: [16, -28],
+      shadowSize: [41, 41],
+    });
+
+    if (partner?.lat && partner?.lon) {
+      if (!partnerMarkerRef.current) {
+        partnerMarkerRef.current = L.marker([partner.lat, partner.lon], { 
+          icon: partnerIcon 
+        }).addTo(instRef.current);
+        partnerMarkerRef.current.bindPopup('🚚 Delivery Partner').openPopup();
+      } else {
+        partnerMarkerRef.current.setLatLng([partner.lat, partner.lon]);
+      }
+    } else if (partnerMarkerRef.current) {
+      instRef.current.removeLayer(partnerMarkerRef.current);
+      partnerMarkerRef.current = null;
     }
   }, [partner]);
+
+  // Update map view to show both markers
+  useEffect(() => {
+    if (!instRef.current) return;
+    
+    const markers: L.LatLng[] = [];
+    if (center?.lat && center?.lon) markers.push([center.lat, center.lon]);
+    if (partner?.lat && partner?.lon) markers.push([partner.lat, partner.lon]);
+    
+    if (markers.length > 0) {
+      const group = new L.featureGroup(markers.map(latlng => L.marker(latlng)));
+      instRef.current.fitBounds(group.getBounds().pad(0.1));
+    } else if (center?.lat && center?.lon) {
+      instRef.current.setView([center.lat, center.lon], 14);
+    } else if (partner?.lat && partner?.lon) {
+      instRef.current.setView([partner.lat, partner.lon], 15);
+    }
+  }, [center, partner]);
 
   return (
     <div

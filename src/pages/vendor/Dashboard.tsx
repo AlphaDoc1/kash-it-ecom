@@ -446,11 +446,35 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
       const orderIds = [...new Set(orderItems.map(oi => oi.order_id))];
       console.log('Order IDs with vendor products:', orderIds);
       
+      // Get order visibility for this vendor to filter out hidden orders
+      const { data: visibilityData, error: visibilityError } = await supabase
+        .from('order_visibility')
+        .select('order_id, is_visible')
+        .eq('user_id', userId)
+        .eq('user_type', 'vendor')
+        .in('order_id', orderIds);
+      
+      if (visibilityError) {
+        console.error('Error fetching order visibility:', visibilityError);
+      }
+      
+      // Filter out hidden orders
+      const hiddenOrderIds = new Set(
+        visibilityData?.filter(v => !v.is_visible).map(v => v.order_id) || []
+      );
+      
+      const visibleOrderIds = orderIds.filter(id => !hiddenOrderIds.has(id));
+      
+      if (visibleOrderIds.length === 0) {
+        console.log('No visible orders found for vendor');
+        return [];
+      }
+      
       // Get the actual orders
       const { data: basicOrders, error: basicError } = await supabase
         .from('orders')
         .select('*')
-        .in('id', orderIds)
+        .in('id', visibleOrderIds)
         .order('created_at', { ascending: false });
       
       console.log('Basic orders query result:', { data: basicOrders, error: basicError });
@@ -695,28 +719,21 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
 
   const deleteOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      console.log('Deleting order via RPC:', orderId);
-      const { error } = await (supabase as any).rpc('vendor_delete_order', { p_order_id: orderId });
+      console.log('Hiding order from vendor history via RPC:', orderId);
+      const { error } = await (supabase as any).rpc('vendor_delete_order_fixed', { p_order_id: orderId });
       if (error) {
-        console.error('vendor_delete_order RPC error:', error);
+        console.error('vendor_delete_order_fixed RPC error:', error);
         throw error;
       }
-      console.log('vendor_delete_order RPC success for:', orderId);
+      console.log('vendor_delete_order_fixed RPC success for:', orderId);
     },
     onSuccess: (_, orderId) => {
-      toast.success('Order deleted successfully');
+      toast.success('Order removed from your history');
       persistHidden(Array.from(new Set([...(hiddenOrderIds || []), orderId as string])));
       queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
     },
-    onError: async (e: any, orderId) => {
-      try {
-        await supabase.from('orders').delete().eq('id', orderId as string);
-        persistHidden(Array.from(new Set([...(hiddenOrderIds || []), orderId as string])));
-        toast.success('Order deleted successfully');
-        queryClient.invalidateQueries({ queryKey: ['vendor-orders', vendor?.id] });
-      } catch (err: any) {
-        toast.error(e?.message || 'Failed to delete order');
-      }
+    onError: (e: any) => {
+      toast.error(e?.message || 'Failed to remove order from history');
     },
   });
 

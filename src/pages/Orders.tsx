@@ -78,29 +78,51 @@ const Orders = () => {
       if (basicError) throw basicError;
       if (!basicOrders) return [];
       
-      // Get order items for these orders
+      // Get order visibility for this user to filter out hidden orders
       const orderIds = basicOrders.map(o => o.id);
+      const { data: visibilityData, error: visibilityError } = await supabase
+        .from('order_visibility')
+        .select('order_id, is_visible')
+        .eq('user_id', user.id)
+        .eq('user_type', 'customer')
+        .in('order_id', orderIds);
+      
+      if (visibilityError) {
+        console.error('Error fetching order visibility:', visibilityError);
+      }
+      
+      // Filter out hidden orders
+      const hiddenOrderIds = new Set(
+        visibilityData?.filter(v => !v.is_visible).map(v => v.order_id) || []
+      );
+      
+      const visibleOrders = basicOrders.filter(order => !hiddenOrderIds.has(order.id));
+      
+      if (visibleOrders.length === 0) return [];
+      
+      // Get order items for visible orders
+      const visibleOrderIds = visibleOrders.map(o => o.id);
       const { data: orderItems, error: itemsError } = await supabase
         .from('order_items')
         .select('*, products(name)')
-        .in('order_id', orderIds);
+        .in('order_id', visibleOrderIds);
       
       if (itemsError) {
         console.error('Error fetching order items:', itemsError);
       }
       
-      // Get delivery requests for these orders (using any type to avoid type issues)
+      // Get delivery requests for visible orders (using any type to avoid type issues)
       const { data: deliveryRequests, error: drError } = await (supabase as any)
         .from('delivery_requests')
         .select('order_id, status')
-        .in('order_id', orderIds);
+        .in('order_id', visibleOrderIds);
       
       if (drError) {
         console.error('Error fetching delivery requests:', drError);
       }
       
       // Combine the data
-      const enrichedOrders = basicOrders.map(order => {
+      const enrichedOrders = visibleOrders.map(order => {
         const orderOrderItems = orderItems?.filter((item: any) => item.order_id === order.id) || [];
         const deliveryRequest = deliveryRequests?.find((dr: any) => dr.order_id === order.id);
         
@@ -139,17 +161,17 @@ const Orders = () => {
 
   const deleteOrder = useMutation({
     mutationFn: async (orderId: string) => {
-      // Use server-side RPC to avoid RLS recursion
+      // Use server-side RPC to hide order from user's history
       const { error } = await (supabase as any).rpc('user_delete_order', { p_order_id: orderId });
       if (error) throw error;
     },
     onSuccess: (_, orderId) => {
       persistHidden(Array.from(new Set([...(hiddenOrderIds || []), orderId as string])));
-      toast.success('Order deleted successfully.');
+      toast.success('Order removed from your history.');
       queryClient.invalidateQueries({ queryKey: ['orders', user?.id] });
     },
     onError: (e: any) => {
-      toast.error(e?.message || 'Failed to delete order');
+      toast.error(e?.message || 'Failed to remove order from history');
     },
   });
 
@@ -309,7 +331,9 @@ const StatusTimeline = ({ status }: { status: any }) => {
 
 const UserOrderTracking = ({ orderId }: { orderId: string }) => {
   const [positions, setPositions] = useState<Array<{ latitude: number; longitude: number }>>([]);
-  const { data } = useQuery({
+  
+  // Get delivery tracking data
+  const { data: trackingData } = useQuery({
     queryKey: ['delivery-tracking', orderId],
     refetchInterval: 5000,
     queryFn: async () => {
@@ -324,19 +348,62 @@ const UserOrderTracking = ({ orderId }: { orderId: string }) => {
     }
   });
 
-  useEffect(() => {
-    if (data && data.length > 0) setPositions(data);
-  }, [data]);
+  // Get order details to find delivery partner and user address
+  const { data: orderData } = useQuery({
+    queryKey: ['order-details', orderId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select(`
+          id,
+          user_id,
+          address_id,
+          delivery_partner_id,
+          addresses(latitude, longitude),
+          delivery_partners!delivery_partner_id(latitude, longitude)
+        `)
+        .eq('id', orderId)
+        .single();
+      if (error) throw error;
+      return data;
+    }
+  });
 
+  useEffect(() => {
+    if (trackingData && trackingData.length > 0) setPositions(trackingData);
+  }, [trackingData]);
+
+  // Determine partner location - prefer tracking data, fallback to delivery_partners table
   const partner = positions[0]
     ? { lat: positions[0].latitude, lon: positions[0].longitude }
+    : orderData?.delivery_partners?.latitude && orderData?.delivery_partners?.longitude
+    ? { lat: orderData.delivery_partners.latitude, lon: orderData.delivery_partners.longitude }
     : undefined;
 
-  if (!partner) return null;
+  // Get user location from address or profile
+  const userLocation = orderData?.addresses?.latitude && orderData?.addresses?.longitude
+    ? { lat: orderData.addresses.latitude, lon: orderData.addresses.longitude }
+    : undefined;
+
+  if (!partner && !userLocation) return null;
+  
   return (
     <div className="mb-3">
-      <div className="flex items-center gap-2 text-sm mb-2 text-muted-foreground"><MapPin className="h-4 w-4" /> Live location</div>
-      <LiveMap partner={partner} height={180} />
+      <div className="flex items-center gap-2 text-sm mb-2 text-muted-foreground">
+        <MapPin className="h-4 w-4" /> 
+        Live Tracking
+        {partner && <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded">Partner Online</span>}
+      </div>
+      <LiveMap 
+        center={userLocation} 
+        partner={partner} 
+        height={180} 
+      />
+      <div className="mt-2 text-xs text-muted-foreground">
+        {userLocation && <span>📍 Your Location</span>}
+        {userLocation && partner && <span> • </span>}
+        {partner && <span>🚚 Delivery Partner</span>}
+      </div>
     </div>
   );
 }
