@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { getCurrentPosition } from '@/lib/utils';
 import { STATUS_LABEL, ORDER_STATUSES } from '@/lib/orderStatus';
+import { deleteProductImage } from '@/lib/deleteProductImage';
 
 const VendorDashboard = () => {
   const { userRoles, user, loading } = useAuth();
@@ -1122,28 +1123,8 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
       
       if (error) throw error;
       
-      // Delete the image file from storage if it exists
-      if (product.image_url) {
-        try {
-          // Extract file path from the full URL
-          const url = new URL(product.image_url);
-          const filePath = url.pathname.substring(1); // Remove leading slash
-          
-          const { error: storageError } = await supabase.storage
-            .from('product-images')
-            .remove([filePath]);
-          
-          if (storageError) {
-            console.warn('Failed to delete image file:', storageError);
-            // Don't throw error here - product is already deleted, just log the warning
-          } else {
-            console.log('Successfully deleted image file:', filePath);
-          }
-        } catch (err) {
-          console.warn('Error processing image URL for deletion:', err);
-          // Don't throw error here - product is already deleted
-        }
-      }
+      // Delete the image file from storage using the utility function
+      await deleteProductImage(product.image_url);
     },
     onSuccess: () => {
       toast.success('Product deleted successfully');
