@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/lib/auth';
@@ -12,9 +12,12 @@ import { toast } from 'sonner';
 const Checkout = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'online'>('cod');
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+
+  const buyNowItems = (location.state as any)?.buyNow as Array<{ product: { id: string; name: string; price: number }, quantity: number }> | undefined;
 
   const { data: cartItems } = useQuery({
     queryKey: ['cart', user?.id],
@@ -54,12 +57,16 @@ const Checkout = () => {
     }
   }, [addresses, selectedAddressId]);
 
-  const subtotal = cartItems?.reduce((sum, item) => sum + (item.products.price * item.quantity), 0) || 0;
+  const computedItems = buyNowItems
+    ? buyNowItems.map((bi, idx) => ({ id: `buy-${idx}`, products: bi.product, quantity: bi.quantity }))
+    : (cartItems || []);
+
+  const subtotal = computedItems.reduce((sum, item: any) => sum + (item.products.price * item.quantity), 0) || 0;
 
   const placeCodOrder = useMutation({
     mutationFn: async () => {
       if (!user) throw new Error('Not authenticated');
-      if (!cartItems || cartItems.length === 0) throw new Error('Cart empty');
+      if (!computedItems || computedItems.length === 0) throw new Error('No items');
       if (!addresses || addresses.length === 0) throw new Error('No address');
 
       const selectedAddress = addresses.find((a: any) => a.id === selectedAddressId);
@@ -86,7 +93,7 @@ const Checkout = () => {
         .single();
       if (orderErr) throw orderErr;
 
-      const items = cartItems.map((ci: any) => ({
+      const items = computedItems.map((ci: any) => ({
         order_id: order.id,
         product_id: ci.products.id,
         snapshot_name: ci.products.name,
@@ -96,11 +103,13 @@ const Checkout = () => {
       const { error: itemsErr } = await supabase.from('order_items').insert(items);
       if (itemsErr) throw itemsErr;
 
-      const { error: clearErr } = await supabase
-        .from('cart_items')
-        .delete()
-        .eq('user_id', user.id);
-      if (clearErr) throw clearErr;
+      if (!buyNowItems) {
+        const { error: clearErr } = await supabase
+          .from('cart_items')
+          .delete()
+          .eq('user_id', user.id);
+        if (clearErr) throw clearErr;
+      }
     },
     onSuccess: () => {
       toast.success('Order placed successfully (COD)');
@@ -115,7 +124,7 @@ const Checkout = () => {
     return null;
   }
 
-  if (!cartItems || cartItems.length === 0) {
+  if (!buyNowItems && (!cartItems || cartItems.length === 0)) {
     navigate('/cart');
     return null;
   }

@@ -246,6 +246,36 @@ const ProductDetail = () => {
                 <ShoppingCart className="mr-2 h-5 w-5" />
                 {product.stock === 0 ? 'Out of Stock' : 'Add to Cart'}
               </Button>
+
+              <Button
+                size="lg"
+                variant="secondary"
+                className="w-full"
+                disabled={product.stock === 0}
+                onClick={() => {
+                  if (!user) {
+                    toast.error('Please login to continue');
+                    navigate('/auth');
+                    return;
+                  }
+                  navigate('/checkout', {
+                    state: {
+                      buyNow: [
+                        {
+                          product: {
+                            id: product.id,
+                            name: product.name,
+                            price: product.price,
+                          },
+                          quantity,
+                        },
+                      ],
+                    },
+                  });
+                }}
+              >
+                Buy Now
+              </Button>
             </div>
           </div>
         </div>
