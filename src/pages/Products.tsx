@@ -127,8 +127,8 @@ const Products = () => {
               <Card key={product.id} className="overflow-hidden hover:shadow-lg transition-shadow h-full flex flex-col">
                 <CardHeader className="p-0">
                   <div className="aspect-square bg-gradient-card flex items-center justify-center">
-                    {product.image_url ? (
-                      <img src={product.image_url} alt={product.name} className="object-cover w-full h-full" />
+                    {(product as any).main_image_url || product.image_url ? (
+                      <img src={(product as any).main_image_url || product.image_url} alt={product.name} className="object-cover w-full h-full" />
                     ) : (
                       <ShoppingBag className="h-16 w-16 sm:h-20 sm:w-20 md:h-24 md:w-24 text-muted-foreground/50" />
                     )}

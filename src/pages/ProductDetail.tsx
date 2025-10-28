@@ -72,10 +72,15 @@ const ProductDetail = () => {
 
   // Set the first image as selected when gallery loads
   useEffect(() => {
-    if (gallery && gallery.length > 0 && !selectedImage) {
-      setSelectedImage(gallery[0]);
+    if (!selectedImage) {
+      const preferred = product?.main_image_url || product?.image_url;
+      if (preferred) {
+        setSelectedImage(preferred);
+      } else if (gallery && gallery.length > 0) {
+        setSelectedImage(gallery[0]);
+      }
     }
-  }, [gallery, selectedImage]);
+  }, [gallery, selectedImage, product?.main_image_url, product?.image_url]);
 
   const addToCartMutation = useMutation({
     mutationFn: async () => {
@@ -154,7 +159,7 @@ const ProductDetail = () => {
               <div className="aspect-square bg-gradient-card flex items-center justify-center">
                 {selectedImage || product.image_url ? (
                   <img 
-                    src={selectedImage || product.image_url} 
+                    src={selectedImage || product.main_image_url || product.image_url} 
                     alt={product.name} 
                     className="object-cover w-full h-full" 
                   />

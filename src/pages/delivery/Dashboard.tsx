@@ -627,9 +627,13 @@ const AssignedRequests = () => {
                   )}
                   <div className="text-xs">
                     {(() => {
-                      const amt = (r.orders?.final_amount ?? orderAmountById[r.order_id]?.final_amount) ?? (r.orders?.subtotal ?? orderAmountById[r.order_id]?.subtotal) ?? 0;
-                      const pay = r.orders?.payment_status || orderAmountById[r.order_id]?.payment_status || '—';
-                      return <>Amount: ₹{amt} • Payment: {pay}</>;
+                      // Prefer RPC values (populated after acceptance) over raw order values
+                      const rpcAmt = orderAmountById[r.order_id]?.final_amount ?? orderAmountById[r.order_id]?.subtotal;
+                      const rawAmt = r.orders?.final_amount ?? r.orders?.subtotal;
+                      const amtNum = Number(rpcAmt ?? rawAmt ?? 0);
+                      const pay = orderAmountById[r.order_id]?.payment_status || r.orders?.payment_status || '—';
+                      const formatted = isFinite(amtNum) ? amtNum.toFixed(2) : '0.00';
+                      return <>Amount: ₹{formatted} • Payment: {pay}</>;
                     })()}
                   </div>
                 </div>

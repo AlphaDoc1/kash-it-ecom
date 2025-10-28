@@ -328,7 +328,7 @@ const ProductCard = ({ product }: { product: any }) => {
     }
   }, [hasGallery, selectedImage, gallery]);
   
-  const displayImage = selectedImage || product.image_url;
+  const displayImage = selectedImage || (product as any).main_image_url || product.image_url;
   
   return (
     <Card className="overflow-hidden hover:shadow-lg transition-shadow h-full flex flex-col">

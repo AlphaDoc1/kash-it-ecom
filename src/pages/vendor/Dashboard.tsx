@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import { getCurrentPosition } from '@/lib/utils';
 import { STATUS_LABEL, ORDER_STATUSES } from '@/lib/orderStatus';
 import { deleteProductImage } from '@/lib/deleteProductImage';
+import React from 'react';
 
 const VendorDashboard = () => {
   const { userRoles, user, loading } = useAuth();
@@ -1067,6 +1068,7 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
 
 const VendorProductsList = ({ userId }: { userId: string | null }) => {
   const queryClient = useQueryClient();
+  const [editProduct, setEditProduct] = useState<null | { id: string; name: string; price: number; stock: number; unit: string | null }>(null);
   const { data: vendor } = useQuery({
     queryKey: ['vendor-profile', userId],
     enabled: !!userId,
@@ -1087,7 +1089,7 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('products')
-        .select('id, name, price, stock, unit, is_approved, image_url')
+        .select('id, name, price, stock, unit, is_approved, image_url, main_image_url')
         .eq('vendor_id', vendor!.id)
         .eq('is_active', true)
         // .eq('is_deleted', false) // Temporarily disabled until migration is applied
@@ -1157,12 +1159,13 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
   if (!products || products.length === 0) return <p className="text-sm text-muted-foreground">No products yet.</p>;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-      {products.map((p) => (
-        <div key={p.id} className="p-3 sm:p-4 border rounded-md flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[500px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+        {products.map((p) => (
+          <div key={p.id} className="p-3 sm:p-4 border rounded-md flex flex-col sm:flex-row gap-3 items-start sm:items-center">
           <div className="w-16 h-16 bg-muted rounded overflow-hidden flex items-center justify-center flex-shrink-0">
             {p.image_url ? (
-              <img src={p.image_url} alt={p.name} className="object-cover w-full h-full" />
+              <img src={(p as any).main_image_url || p.image_url} alt={p.name} className="object-cover w-full h-full" />
             ) : (
               <Package className="h-6 w-6 text-muted-foreground" />
             )}
@@ -1182,6 +1185,15 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
             <ManageProductPhotosButton productId={p.id} />
             <Button
               size="sm"
+              variant="outline"
+              onClick={() => setEditProduct({ id: p.id, name: p.name, price: Number(p.price), stock: Number(p.stock), unit: p.unit || null })}
+              title="Edit stock and price"
+              className="flex-1 sm:flex-none"
+            >
+              Edit
+            </Button>
+            <Button
+              size="sm"
               variant="destructive"
               onClick={() => {
                 if (confirm('Remove this product from the storefront?')) deleteProduct.mutate(p.id);
@@ -1192,9 +1204,24 @@ const VendorProductsList = ({ userId }: { userId: string | null }) => {
               <Trash2 className="h-4 w-4" />
             </Button>
           </div>
-        </div>
-      ))}
-    </div>
+          </div>
+        ))}
+      </div>
+      {editProduct && (
+        <EditProductDialog
+          vendorId={vendor?.id || ''}
+          product={editProduct}
+          onClose={() => setEditProduct(null)}
+          onUpdated={() => {
+            setEditProduct(null);
+            queryClient.invalidateQueries({ queryKey: ['vendor-products', vendor?.id] });
+            queryClient.invalidateQueries({ queryKey: ['admin-all-products'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-vendor-products'] });
+            queryClient.invalidateQueries({ queryKey: ['admin-products-count'] });
+          }}
+        />
+      )}
+    </>
   );
 };
 
@@ -1211,7 +1238,8 @@ const ManageProductPhotosButton = ({ productId }: { productId: string }) => {
 };
 
 const ManageProductPhotosDialog = ({ productId, onClose }: { productId: string; onClose: () => void }) => {
-  const [files, setFiles] = useState<FileList | null>(null);
+  const [mainFile, setMainFile] = useState<File | null>(null);
+  const [angleFiles, setAngleFiles] = useState<FileList | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [items, setItems] = useState<Array<{ name: string; publicUrl: string }>>([]);
 
@@ -1232,17 +1260,32 @@ const ManageProductPhotosDialog = ({ productId, onClose }: { productId: string; 
   useEffect(() => { fetchList(); }, []);
 
   const onUpload = async () => {
-    if (!files || files.length === 0) return;
+    if (!mainFile && (!angleFiles || angleFiles.length === 0)) return;
     setIsUploading(true);
     try {
-      for (const file of Array.from(files)) {
-        const ext = file.name.split('.').pop();
-        const path = `${productId}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-        const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: false, cacheControl: '3600' });
-        if (error) throw error;
+      // Upload main image if provided
+      if (mainFile) {
+        const ext = mainFile.name.split('.').pop();
+        const path = `${productId}/main-${Date.now()}.${ext}`;
+        const { error: upErr } = await supabase.storage.from('product-images').upload(path, mainFile, { upsert: false, cacheControl: '3600' });
+        if (upErr) throw upErr;
+        const { data: urlData } = supabase.storage.from('product-images').getPublicUrl(path);
+        await supabase.from('products').update({ main_image_url: urlData.publicUrl }).eq('id', productId);
       }
+
+      // Upload angle images
+      if (angleFiles && angleFiles.length > 0) {
+        for (const file of Array.from(angleFiles)) {
+          const ext = file.name.split('.').pop();
+          const path = `${productId}/angle-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+          const { error } = await supabase.storage.from('product-images').upload(path, file, { upsert: false, cacheControl: '3600' });
+          if (error) throw error;
+        }
+      }
+
       toast.success('Photos uploaded');
-      setFiles(null);
+      setMainFile(null);
+      setAngleFiles(null);
       await fetchList();
     } catch (e: any) {
       toast.error(e?.message || 'Failed to upload');
@@ -1270,39 +1313,162 @@ const ManageProductPhotosDialog = ({ productId, onClose }: { productId: string; 
           <Button size="sm" variant="outline" onClick={onClose} className="text-xs sm:text-sm">Close</Button>
         </div>
         <div className="space-y-3">
-          <div>
-            <input 
-              type="file" 
-              multiple 
-              accept="image/*" 
-              onChange={(e) => setFiles(e.target.files)} 
-              className="w-full text-xs sm:text-sm"
-            />
-            <div className="mt-2">
-              <Button 
-                size="sm" 
-                onClick={onUpload} 
-                disabled={isUploading || !files || files.length === 0}
-                className="w-full sm:w-auto"
-              >
-                {isUploading ? 'Uploading…' : 'Upload'}
-              </Button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <div className="text-xs font-medium mb-1">Main Image</div>
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={(e) => setMainFile(e.target.files?.[0] || null)} 
+                className="w-full text-xs sm:text-sm"
+              />
+            </div>
+            <div>
+              <div className="text-xs font-medium mb-1">Angle Images</div>
+              <input 
+                type="file" 
+                multiple 
+                accept="image/*" 
+                onChange={(e) => setAngleFiles(e.target.files)} 
+                className="w-full text-xs sm:text-sm"
+              />
             </div>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 max-h-60 sm:max-h-80 overflow-auto">
-            {items.map((it) => (
-              <div key={it.name} className="relative border rounded overflow-hidden">
-                <img src={it.publicUrl} alt={it.name} className="object-cover w-full h-20 sm:h-28" />
-                <div className="absolute top-1 right-1">
-                  <Button variant="destructive" size="icon" onClick={() => onDelete(it.name)} className="h-6 w-6">
-                    <Trash2 className="h-3 w-3" />
-                  </Button>
-                </div>
-              </div>
-            ))}
-            {items.length === 0 && (
-              <div className="col-span-2 sm:col-span-3 text-xs sm:text-sm text-muted-foreground text-center py-4">No photos yet. Upload images to showcase the product.</div>
-            )}
+          <div className="mt-2">
+            <Button 
+              size="sm" 
+              onClick={onUpload} 
+              disabled={isUploading || (!mainFile && (!angleFiles || angleFiles.length === 0))}
+              className="w-full sm:w-auto"
+            >
+              {isUploading ? 'Uploading…' : 'Upload'}
+            </Button>
+          </div>
+          <PhotoGrid items={items} productId={productId} onDelete={onDelete} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PhotoGrid = ({ items, productId, onDelete }: { items: Array<{ name: string; publicUrl: string }>; productId: string; onDelete: (name: string) => Promise<void> }) => {
+  const [mainUrl, setMainUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchMain = async () => {
+      const { data } = await supabase
+        .from('products')
+        .select('main_image_url')
+        .eq('id', productId)
+        .maybeSingle();
+      setMainUrl((data as any)?.main_image_url || null);
+    };
+    fetchMain();
+  }, [productId]);
+
+  const setAsMain = async (name: string) => {
+    const { data } = supabase.storage.from('product-images').getPublicUrl(`${productId}/${name}`);
+    const url = data.publicUrl;
+    const { error } = await supabase
+      .from('products')
+      .update({ main_image_url: url })
+      .eq('id', productId);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    setMainUrl(url);
+    toast.success('Main image updated');
+  };
+
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3 max-h-60 sm:max-h-80 overflow-auto">
+      {items.map((it) => (
+        <div key={it.name} className="relative border rounded overflow-hidden">
+          <img src={it.publicUrl} alt={it.name} className="object-cover w-full h-20 sm:h-28" />
+          <div className="absolute top-1 right-1 flex gap-1">
+            <Button size="xs" variant="secondary" onClick={() => setAsMain(it.name)} className="h-6 px-2 text-[10px]">
+              {mainUrl === it.publicUrl ? 'Main' : 'Set Main'}
+            </Button>
+            <Button variant="destructive" size="icon" onClick={() => onDelete(it.name)} className="h-6 w-6">
+              <Trash2 className="h-3 w-3" />
+            </Button>
+          </div>
+        </div>
+      ))}
+      {items.length === 0 && (
+        <div className="col-span-2 sm:col-span-3 text-xs sm:text-sm text-muted-foreground text-center py-4">No photos yet. Upload images to showcase the product.</div>
+      )}
+    </div>
+  );
+};
+
+const EditProductDialog = ({
+  vendorId,
+  product,
+  onClose,
+  onUpdated,
+}: {
+  vendorId: string;
+  product: { id: string; name: string; price: number; stock: number; unit: string | null };
+  onClose: () => void;
+  onUpdated: () => void;
+}) => {
+  const [price, setPrice] = useState<string>(product.price.toString());
+  const [stock, setStock] = useState<string>(product.stock.toString());
+  const [saving, setSaving] = useState(false);
+
+  const onSave = async () => {
+    const newPrice = Number(price);
+    const newStock = Number(stock);
+    if (!Number.isFinite(newPrice) || newPrice < 0) {
+      toast.error('Enter a valid non-negative price');
+      return;
+    }
+    if (!Number.isInteger(newStock) || newStock < 0) {
+      toast.error('Enter a valid non-negative stock');
+      return;
+    }
+    setSaving(true);
+    try {
+      const { data, error } = await (supabase as any).rpc('vendor_update_product_stock_price', {
+        p_product_id: product.id,
+        p_vendor_id: vendorId,
+        p_new_stock: newStock,
+        p_new_price: newPrice,
+      });
+      if (error) throw error;
+      if (!data?.success) {
+        toast.error(data?.message || 'Update failed');
+      } else {
+        onUpdated();
+      }
+    } catch (e: any) {
+      toast.error(e?.message || 'Failed to update');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div className="w-full max-w-sm rounded-md bg-white p-4 shadow-lg">
+        <div className="mb-3">
+          <div className="text-sm font-semibold">Edit Product</div>
+          <div className="text-xs text-muted-foreground truncate">{product.name}</div>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs text-muted-foreground">Price (₹)</label>
+            <Input type="number" min="0" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs text-muted-foreground">Stock</label>
+            <Input type="number" min="0" step="1" value={stock} onChange={(e) => setStock(e.target.value)} />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
+            <Button size="sm" onClick={onSave} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
           </div>
         </div>
       </div>
