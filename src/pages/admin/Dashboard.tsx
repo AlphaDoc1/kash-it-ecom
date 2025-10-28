@@ -890,12 +890,12 @@ const VendorsList = () => {
     queryKey: ['admin-vendors'],
     queryFn: async () => {
       try {
-        const { data, error } = await supabase
-          .from('vendors')
+      const { data, error } = await supabase
+        .from('vendors')
           .select('id, business_name, is_active, is_approved, profiles(full_name)')
-          .order('created_at', { ascending: false });
-        if (error) throw error;
-        return data as any[]; 
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[]; 
       } catch (err) {
         console.error('Error fetching vendors:', err);
         return [];
