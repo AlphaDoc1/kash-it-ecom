@@ -197,7 +197,7 @@ const AssignedRequests = () => {
   const [userByOrderId, setUserByOrderId] = useState<Record<string, { full_name?: string | null; phone?: string | null }>>({});
   const [addressByOrderId, setAddressByOrderId] = useState<Record<string, { full_address?: string | null; city?: string | null; state?: string | null; pincode?: string | null; phone?: string | null }>>({});
   const [vendorById, setVendorById] = useState<Record<string, { business_name?: string | null; business_address?: string | null }>>({});
-  const [orderAmountById, setOrderAmountById] = useState<Record<string, { final_amount?: number | null; subtotal?: number | null; payment_status?: string | null }>>({});
+  const [orderAmountById, setOrderAmountById] = useState<Record<string, { final_amount?: number | null; subtotal?: number | null; payment_status?: string | null; is_order_for_someone_else?: boolean | null }>>({});
   useEffect(() => {
     const loadItems = async (orderId: string) => {
       const { data: items } = await supabase
@@ -207,31 +207,67 @@ const AssignedRequests = () => {
       setOrderItemsByOrderId(prev => ({ ...prev, [orderId]: items || [] }));
     };
     const loadUserAndAddress = async (orderId: string) => {
-      // Use secure RPC so RLS allows fetching details for assigned partner
-      const { data: details, error } = await (supabase as any)
-        .rpc('get_delivery_order_details', { p_order_id: orderId, p_partner_user_id: user!.id });
-      if (!error && details) {
-        setUserByOrderId(prev => ({ ...prev, [orderId]: { full_name: details.full_name, phone: details.phone } }));
-        setAddressByOrderId(prev => ({ ...prev, [orderId]: {
-          full_address: details.full_address,
-          city: details.city,
-          state: details.state,
-          pincode: details.pincode,
-          phone: details.phone,
-        }}));
-        setOrderAmountById(prev => ({ ...prev, [orderId]: {
-          final_amount: details.final_amount,
-          subtotal: details.subtotal,
-          payment_status: details.payment_status,
-        }}));
-        // Persist resolved user lat/lon in memory for routing
-        if (details.latitude != null && details.longitude != null) {
-          (addressByOrderId as any)[orderId] = {
-            ...(addressByOrderId as any)[orderId],
-            latitude: details.latitude,
-            longitude: details.longitude,
-          };
+      try {
+        // Use secure RPC so RLS allows fetching details for assigned partner
+        const { data: details, error } = await (supabase as any)
+          .rpc('get_delivery_order_details', { p_order_id: orderId, p_partner_user_id: user!.id });
+        if (error) {
+          console.error('RPC get_delivery_order_details error:', error);
+          return;
         }
+        // RPC returns a single row (object), not array
+        const row = Array.isArray(details) ? details[0] : details;
+        if (row) {
+          console.log('Loaded user details for order:', orderId, row);
+          setUserByOrderId(prev => ({ ...prev, [orderId]: { full_name: row.full_name, phone: row.phone } }));
+          setAddressByOrderId(prev => ({
+            ...prev,
+            [orderId]: {
+              ...(prev[orderId] || {}),
+              full_address: row.full_address,
+              city: row.city,
+              state: row.state,
+              pincode: row.pincode,
+              phone: row.phone,
+              latitude: row.latitude != null ? row.latitude : (prev[orderId]?.latitude ?? null),
+              longitude: row.longitude != null ? row.longitude : (prev[orderId]?.longitude ?? null),
+            },
+          }));
+          setOrderAmountById(prev => ({ ...prev, [orderId]: {
+            final_amount: row.final_amount,
+            subtotal: row.subtotal,
+            payment_status: row.payment_status,
+            is_order_for_someone_else: row.is_order_for_someone_else ?? false,
+          }}));
+          // Override with alternate drop coordinates if present on the order
+          try {
+            const { data: orderAlt } = await supabase
+              .from('orders')
+              .select('is_order_for_someone_else, alt_drop_latitude, alt_drop_longitude')
+              .eq('id', orderId)
+              .maybeSingle();
+            if (orderAlt?.alt_drop_latitude != null && orderAlt?.alt_drop_longitude != null) {
+              setAddressByOrderId(prev => ({
+                ...prev,
+                [orderId]: {
+                  ...(prev[orderId] || {}),
+                  latitude: Number(orderAlt.alt_drop_latitude),
+                  longitude: Number(orderAlt.alt_drop_longitude),
+                },
+              }));
+              setOrderAmountById(prev => ({ ...prev, [orderId]: {
+                ...(prev[orderId] || {}),
+                is_order_for_someone_else: !!orderAlt.is_order_for_someone_else,
+              }}));
+            }
+          } catch (e) {
+            console.warn('Failed to load alt drop coords:', e);
+          }
+        } else {
+          console.warn('No details returned from RPC for order:', orderId);
+        }
+      } catch (e) {
+        console.error('Error loading user and address:', e);
       }
     };
     const loadVendor = async (vendorId: string) => {
@@ -247,7 +283,7 @@ const AssignedRequests = () => {
       if (!orderId || orderAmountById[orderId]) return;
       const { data } = await supabase
         .from('orders')
-        .select('final_amount, subtotal, payment_status')
+        .select('final_amount, subtotal, payment_status, is_order_for_someone_else')
         .eq('id', orderId)
         .maybeSingle();
       if (data) setOrderAmountById(prev => ({ ...prev, [orderId]: data }));
@@ -258,11 +294,16 @@ const AssignedRequests = () => {
       if (r.vendor_id) loadVendor(r.vendor_id);
       if (r.order_id) loadOrderAmount(r.order_id);
 
-      if ((status === 'accepted' || status === 'picked_up' || status === 'out_for_delivery' || status === 'delivered') && r.order_id && !orderItemsByOrderId[r.order_id]) {
+      if ((status === 'assigned' || status === 'accepted' || status === 'picked_up' || status === 'out_for_delivery' || status === 'delivered') && r.order_id && !orderItemsByOrderId[r.order_id]) {
         loadItems(r.order_id);
       }
-      if ((status === 'accepted' || status === 'picked_up' || status === 'out_for_delivery' || status === 'delivered') && r.order_id && (!userByOrderId[r.order_id] || !addressByOrderId[r.order_id])) {
-        loadUserAndAddress(r.order_id);
+      // Load user details for any active status - reload if phone/name missing
+      if ((status === 'assigned' || status === 'accepted' || status === 'picked_up' || status === 'out_for_delivery' || status === 'delivered') && r.order_id) {
+        const hasUser = userByOrderId[r.order_id]?.full_name || userByOrderId[r.order_id]?.phone;
+        const hasAddress = addressByOrderId[r.order_id]?.phone;
+        if (!hasUser || !hasAddress) {
+          loadUserAndAddress(r.order_id);
+        }
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -347,6 +388,10 @@ const AssignedRequests = () => {
         const req = (queryClient.getQueryData<any[]>(['delivery-requests', partner?.id]) || []).find((r: any) => r.id === requestId);
         if (req?.order_id) {
           await supabase.from('orders').update({ delivery_status: 'approved' as any }).eq('id', req.order_id);
+          // Immediately trigger user data load after acceptance
+          setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['delivery-requests', partner?.id] });
+          }, 100);
         }
       }
     },
@@ -497,29 +542,87 @@ const AssignedRequests = () => {
       originLon = me?.lon ?? null;
     }
 
-    // Get order details
-    const { data: orderRow } = await supabase
+    // Prefer secure RPC which returns alt coords when present
+    let orderRow: any = null;
+    let rpcLat: number | null = null;
+    let rpcLon: number | null = null;
+    try {
+      const { data: details } = await (supabase as any)
+        .rpc('get_delivery_order_details', { p_order_id: request.order_id, p_partner_user_id: user!.id });
+      if (details) {
+        rpcLat = details.latitude ?? null;
+        rpcLon = details.longitude ?? null;
+      }
+    } catch {}
+    // Also fetch minimal order row for fallbacks
+    const { data: baseRow } = await supabase
       .from('orders')
-      .select('address_id, user_id')
+      .select('address_id, user_id, alt_drop_latitude, alt_drop_longitude, is_order_for_someone_else')
       .eq('id', request.order_id)
       .maybeSingle();
+    orderRow = baseRow || {};
     
     // Try to get user location from address first
     let ulat = null;
     let ulon = null;
-    
-    if (orderRow?.address_id) {
+    // If RPC gave coords (alt-aware), use those first
+    if (rpcLat != null && rpcLon != null) {
+      ulat = Number(rpcLat);
+      ulon = Number(rpcLon);
+      console.log('Using RPC-provided coordinates:', { ulat, ulon });
+      if (originLat == null || originLon == null) {
+        const me = await getCurrentPosition();
+        originLat = me?.lat ?? null;
+        originLon = me?.lon ?? null;
+      }
+      if (ulat == null || ulon == null || originLat == null || originLon == null) {
+        return toast.error('Location unavailable');
+      }
+      try { toast.success(`Routing to: ${Number(ulat).toFixed(6)}, ${Number(ulon).toFixed(6)} (rpc)`); } catch {}
+      const url = buildMapsDirectionUrl({
+        origin: { lat: Number(originLat), lon: Number(originLon) },
+        destination: { lat: Number(ulat), lon: Number(ulon) },
+        travelMode: 'driving',
+        navigate: true,
+      });
+      return openGoogleMaps(url);
+    }
+
+    // If alternate drop coordinates provided on order, use them next
+    if (orderRow?.alt_drop_latitude != null && orderRow?.alt_drop_longitude != null) {
+      ulat = Number(orderRow.alt_drop_latitude);
+      ulon = Number(orderRow.alt_drop_longitude);
+      console.log('Using alternate drop coordinates from order:', { ulat, ulon });
+      if (originLat == null || originLon == null) {
+        const me = await getCurrentPosition();
+        originLat = me?.lat ?? null;
+        originLon = me?.lon ?? null;
+      }
+      if (ulat == null || ulon == null || originLat == null || originLon == null) {
+        return toast.error('Location unavailable');
+      }
+      try { toast.success(`Routing to: ${Number(ulat).toFixed(6)}, ${Number(ulon).toFixed(6)} (alt)`); } catch {}
+      const url = buildMapsDirectionUrl({
+        origin: { lat: Number(originLat), lon: Number(originLon) },
+        destination: { lat: Number(ulat), lon: Number(ulon) },
+        travelMode: 'driving',
+        navigate: true,
+      });
+      return openGoogleMaps(url);
+    }
+
+    if ((ulat == null || ulon == null) && orderRow?.address_id) {
       const { data: addressRow } = await supabase
         .from('addresses')
         .select('latitude, longitude')
         .eq('id', orderRow.address_id)
         .maybeSingle();
-      ulat = addressRow?.latitude ?? null;
-      ulon = addressRow?.longitude ?? null;
+      ulat = ulat ?? (addressRow?.latitude ?? null);
+      ulon = ulon ?? (addressRow?.longitude ?? null);
     }
     // If we have RPC-fetched coordinates, prefer them (more reliable through RLS)
     const rpcAddr = (addressByOrderId as any)[request.order_id];
-    if ((!ulat || !ulon) && rpcAddr?.latitude != null && rpcAddr?.longitude != null) {
+    if ((ulat == null || ulon == null) && rpcAddr?.latitude != null && rpcAddr?.longitude != null) {
       ulat = rpcAddr.latitude;
       ulon = rpcAddr.longitude;
     }
@@ -531,8 +634,8 @@ const AssignedRequests = () => {
         .select('latitude, longitude')
         .eq('id', orderRow.user_id)
         .maybeSingle();
-      ulat = profileRow?.latitude ?? null;
-      ulon = profileRow?.longitude ?? null;
+      ulat = ulat ?? (profileRow?.latitude ?? null);
+      ulon = ulon ?? (profileRow?.longitude ?? null);
     }
     
     // If still missing, use current position as fallback
@@ -547,10 +650,11 @@ const AssignedRequests = () => {
     }
     if (originLat == null || originLon == null) return toast.error('Your location not set');
     
-    console.log('Nav to Customer - origin (partner):', { originLat, originLon }, 'dest (user):', { ulat, ulon });
+    console.log('Nav to Customer - origin (partner):', { originLat, originLon }, 'dest (user):', { ulat, ulon }, 'is_for_someone_else:', orderRow?.is_order_for_someone_else);
+    try { toast.success(`Routing to: ${Number(ulat).toFixed(6)}, ${Number(ulon).toFixed(6)}`); } catch {}
     const url = buildMapsDirectionUrl({
-      origin: { lat: originLat, lon: originLon },
-      destination: { lat: ulat, lon: ulon },
+      origin: { lat: Number(originLat), lon: Number(originLon) },
+      destination: { lat: Number(ulat), lon: Number(ulon) },
       travelMode: 'driving',
       navigate: true,
     });
@@ -612,7 +716,13 @@ const AssignedRequests = () => {
             .map((r: any) => (
             <Card key={r.id}>
               <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Order #{r.order_id?.slice(0,8)} <span className="text-xs uppercase ml-2 text-muted-foreground">{STATUS_LABEL[(r.orders?.delivery_status || r.status || 'pending') as any] || (r.orders?.delivery_status || r.status || 'pending')}</span></CardTitle>
+                <CardTitle className="text-lg">
+                  Order #{r.order_id?.slice(0,8)}
+                  <span className="text-xs uppercase ml-2 text-muted-foreground">{STATUS_LABEL[(r.orders?.delivery_status || r.status || 'pending') as any] || (r.orders?.delivery_status || r.status || 'pending')}</span>
+                </CardTitle>
+                {(orderAmountById[r.order_id]?.is_order_for_someone_else || r.orders?.is_order_for_someone_else) && (
+                  <div className="mt-1"><span className="text-[10px] uppercase bg-secondary text-secondary-foreground px-2 py-0.5 rounded">For Someone Else</span></div>
+                )}
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="text-sm space-y-1">
@@ -638,37 +748,7 @@ const AssignedRequests = () => {
                   </div>
                 </div>
                 
-                {/* Customer Phone Number and Call Button */}
-                {(() => {
-                  const addresses = r.orders?.addresses;
-                  const phoneNumber = Array.isArray(addresses) 
-                    ? addresses[0]?.phone 
-                    : addresses?.phone;
-                  
-                  console.log('Order data:', r);
-                  console.log('Phone number:', phoneNumber);
-                  console.log('Addresses data:', addresses);
-                  
-                  if (phoneNumber) {
-                    return (
-                      <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded">
-                        <Phone className="h-4 w-4 text-green-600" />
-                        <span className="text-sm font-medium text-green-900">
-                          Customer: {phoneNumber}
-                        </span>
-                        <a 
-                          href={`tel:${phoneNumber.replace(/\D/g, '')}`}
-                          className="ml-auto"
-                        >
-                          <Button size="sm" variant="outline" className="bg-white hover:bg-green-100">
-                            <Phone className="h-3 w-3 mr-1" /> Call Customer
-                          </Button>
-                        </a>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
+                {/* Removed compact pre-accept banner; details show after accept */}
                 
               {view === 'live' && (r.orders?.delivery_status === 'assigned' || r.status === 'assigned') && (
                   <div className="flex gap-2">

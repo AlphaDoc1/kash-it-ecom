@@ -944,6 +944,9 @@ const VendorOrders = ({ userId, view = 'live' }: { userId: string | null; view?:
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
             <div>
               <div className="font-semibold text-sm sm:text-base">Order #{o.id.slice(0, 8)}</div>
+              {(o as any).is_order_for_someone_else && (
+                <div className="mt-1"><span className="text-[10px] uppercase bg-secondary text-secondary-foreground px-2 py-0.5 rounded">For Someone Else</span></div>
+              )}
               <div className="text-xs text-muted-foreground">{new Date(o.created_at).toLocaleString()}</div>
             </div>
             <div className="text-xs sm:text-sm">Status: <span className={`uppercase ${delivered ? 'text-green-700' : ''}`}>{STATUS_LABEL[(effectiveStatus || 'pending') as any] || (effectiveStatus || 'pending')}</span></div>

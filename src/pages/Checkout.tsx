@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Package } from 'lucide-react';
 import { toast } from 'sonner';
+import LiveMap from '@/components/LiveMap';
 
 const Checkout = () => {
   const { user } = useAuth();
@@ -16,6 +17,10 @@ const Checkout = () => {
   const queryClient = useQueryClient();
   const [paymentMethod, setPaymentMethod] = useState<'cod' | 'online'>('cod');
   const [selectedAddressId, setSelectedAddressId] = useState<string | null>(null);
+  const [isForSomeoneElse, setIsForSomeoneElse] = useState(false);
+  const [altLat, setAltLat] = useState<number | null>(null);
+  const [altLon, setAltLon] = useState<number | null>(null);
+  const [altConfirmed, setAltConfirmed] = useState(false);
 
   const buyNowItems = (location.state as any)?.buyNow as Array<{ product: { id: string; name: string; price: number }, quantity: number }> | undefined;
 
@@ -75,7 +80,17 @@ const Checkout = () => {
       console.log('Available addresses:', addresses);
       console.log('Selected address for order:', selectedAddress);
       
-      const orderPayload = {
+      // Validate alternate location confirmation when enabled
+      if (isForSomeoneElse) {
+        if (altLat == null || altLon == null) {
+          throw new Error('Select a drop location on the map');
+        }
+        if (!altConfirmed) {
+          throw new Error('Please confirm the selected location');
+        }
+      }
+
+      const basePayload = {
         user_id: user.id,
         address_id: selectedAddress.id,
         subtotal: Number(subtotal.toFixed(2)),
@@ -86,12 +101,36 @@ const Checkout = () => {
         delivery_status: 'pending',
       } as const;
 
-      const { data: order, error: orderErr } = await supabase
-        .from('orders')
-        .insert(orderPayload)
-        .select('id')
-        .single();
-      if (orderErr) throw orderErr;
+      // Try inserting with optional alt drop coordinates if provided
+      let order: any = null;
+      try {
+        const fullPayload: any = {
+          ...basePayload,
+          ...(isForSomeoneElse && altLat != null && altLon != null
+            ? {
+                is_order_for_someone_else: true,
+                alt_drop_latitude: altLat,
+                alt_drop_longitude: altLon,
+              }
+            : {}),
+        };
+        const { data, error } = await (supabase as any)
+          .from('orders')
+          .insert(fullPayload)
+          .select('id')
+          .single();
+        if (error) throw error;
+        order = data;
+      } catch (e: any) {
+        console.warn('Insert with alt drop fields failed, retrying without optional fields', e?.message);
+        const { data, error } = await supabase
+          .from('orders')
+          .insert(basePayload)
+          .select('id')
+          .single();
+        if (error) throw error;
+        order = data;
+      }
 
       const items = computedItems.map((ci: any) => ({
         order_id: order.id,
@@ -102,6 +141,33 @@ const Checkout = () => {
       }));
       const { error: itemsErr } = await supabase.from('order_items').insert(items);
       if (itemsErr) throw itemsErr;
+
+      // Ensure alt drop coordinates are persisted even if initial insert path skipped optional fields
+      if (isForSomeoneElse && altLat != null && altLon != null) {
+        try {
+          console.log('Attempting to persist alt drop coords on order', order.id, { altLat, altLon });
+          const { error: updErr } = await (supabase as any)
+            .from('orders')
+            .update({
+              is_order_for_someone_else: true,
+              alt_drop_latitude: altLat,
+              alt_drop_longitude: altLon,
+            })
+            .eq('id', order.id);
+          if (updErr) throw updErr;
+          const { data: verify } = await supabase
+            .from('orders')
+            .select('is_order_for_someone_else, alt_drop_latitude, alt_drop_longitude')
+            .eq('id', order.id)
+            .maybeSingle();
+          console.log('Order alt coords saved verification:', verify);
+          if (!verify?.alt_drop_latitude || !verify?.alt_drop_longitude) {
+            toast.error('Alt location not saved. Please re-try after migrations.');
+          }
+        } catch (e) {
+          console.warn('Failed to persist alt coords on order', e);
+        }
+      }
 
       if (!buyNowItems) {
         const { error: clearErr } = await supabase
@@ -198,6 +264,77 @@ const Checkout = () => {
                 <div className="text-center py-4 sm:py-6">
                   <p className="text-muted-foreground mb-3 sm:mb-4 text-sm sm:text-base">No delivery address found</p>
                   <Button onClick={() => navigate('/profile')} className="w-full sm:w-auto">Add Address</Button>
+                </div>
+              )}
+            </Card>
+
+            {/* Order for Someone Else */}
+            <Card className="p-3 sm:p-4 md:p-6">
+              <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <h2 className="text-lg sm:text-xl md:text-2xl font-bold">Order for Someone Else</h2>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={isForSomeoneElse}
+                    onChange={(e) => setIsForSomeoneElse(e.target.checked)}
+                  />
+                  Enable
+                </label>
+              </div>
+              {isForSomeoneElse && (
+                <div className="space-y-3">
+                  <p className="text-xs sm:text-sm text-muted-foreground">Click on the map to choose the delivery point. We'll save the exact coordinates for the delivery partner.</p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                            if (!navigator.geolocation) return reject(new Error('Geolocation not supported'));
+                            navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
+                          });
+                          const lat = pos.coords.latitude;
+                          const lon = pos.coords.longitude;
+                          setAltLat(lat);
+                          setAltLon(lon);
+                          setAltConfirmed(false);
+                          toast.success('Location detected');
+                        } catch (e: any) {
+                          toast.error(e?.message || 'Failed to detect location');
+                        }
+                      }}
+                    >
+                      Use My Location
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (altLat == null || altLon == null) {
+                          toast.error('Select a location first');
+                          return;
+                        }
+                        setAltConfirmed(true);
+                        toast.success('Location confirmed');
+                      }}
+                      disabled={altLat == null || altLon == null || altConfirmed}
+                    >
+                      {altConfirmed ? 'Location Confirmed' : 'Confirm Location'}
+                    </Button>
+                  </div>
+                  <LiveMap
+                    selectable
+                    height={260}
+                    selected={altLat != null && altLon != null ? { lat: altLat, lon: altLon } : undefined}
+                    onSelect={(coords) => {
+                      setAltLat(coords.lat);
+                      setAltLon(coords.lon);
+                      setAltConfirmed(false);
+                    }}
+                  />
+                  <div className="text-xs sm:text-sm text-muted-foreground">
+                    Selected: {altLat != null && altLon != null ? `${altLat.toFixed(6)}, ${altLon.toFixed(6)}` : '—'} {altConfirmed && <span className="ml-2 px-2 py-0.5 rounded bg-green-100 text-green-800">Confirmed</span>}
+                  </div>
                 </div>
               )}
             </Card>

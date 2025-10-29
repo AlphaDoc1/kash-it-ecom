@@ -3,11 +3,12 @@ import L from 'leaflet';
 
 export type LatLng = { lat: number; lon: number };
 
-export const LiveMap = ({ center, partner, height = 220 }: { center?: LatLng; partner?: LatLng | null; height?: number }) => {
+export const LiveMap = ({ center, partner, selected, height = 220, selectable = false, onSelect }: { center?: LatLng; partner?: LatLng | null; selected?: LatLng | null; height?: number; selectable?: boolean; onSelect?: (coords: LatLng) => void }) => {
   const mapRef = useRef<HTMLDivElement | null>(null);
   const instRef = useRef<L.Map | null>(null);
   const centerMarkerRef = useRef<L.Marker | null>(null);
   const partnerMarkerRef = useRef<L.Marker | null>(null);
+  const selectionMarkerRef = useRef<L.Marker | null>(null);
 
   // Initialize map
   useEffect(() => {
@@ -18,7 +19,33 @@ export const LiveMap = ({ center, partner, height = 220 }: { center?: LatLng; pa
       maxZoom: 19,
     }).addTo(m);
     instRef.current = m;
+    if (selectable) {
+      m.on('click', (e: L.LeafletMouseEvent) => {
+        const { lat, lng } = e.latlng;
+        if (selectionMarkerRef.current) {
+          selectionMarkerRef.current.setLatLng([lat, lng]);
+        } else {
+          selectionMarkerRef.current = L.marker([lat, lng]).addTo(m);
+          selectionMarkerRef.current.bindPopup('📍 Selected drop location').openPopup();
+        }
+        onSelect && onSelect({ lat, lon: lng });
+      });
+    }
   }, []);
+
+  // Reflect externally provided selected coordinate
+  useEffect(() => {
+    if (!instRef.current || !selectable) return;
+    if (selected && selected.lat != null && selected.lon != null) {
+      if (selectionMarkerRef.current) {
+        selectionMarkerRef.current.setLatLng([selected.lat, selected.lon]);
+      } else {
+        selectionMarkerRef.current = L.marker([selected.lat, selected.lon]).addTo(instRef.current);
+        selectionMarkerRef.current.bindPopup('📍 Selected drop location').openPopup();
+      }
+      instRef.current.setView([selected.lat, selected.lon], 16);
+    }
+  }, [selected, selectable]);
 
   // Update center marker (user location)
   useEffect(() => {

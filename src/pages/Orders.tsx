@@ -256,6 +256,11 @@ const Orders = () => {
                   <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
                     <div>
                       <CardTitle className="text-base sm:text-lg">Order #{order.id.slice(0, 8)}</CardTitle>
+                      {order.is_order_for_someone_else && (
+                        <div className="mt-1">
+                          <Badge variant="secondary" className="text-[10px] uppercase">For Someone Else</Badge>
+                        </div>
+                      )}
                       <p className="text-xs sm:text-sm text-muted-foreground">
                         {new Date(order.created_at).toLocaleDateString()}
                       </p>
@@ -359,6 +364,9 @@ const UserOrderTracking = ({ orderId }: { orderId: string }) => {
           user_id,
           address_id,
           delivery_partner_id,
+          is_order_for_someone_else,
+          alt_drop_latitude,
+          alt_drop_longitude,
           addresses(latitude, longitude),
           delivery_partners!delivery_partner_id(latitude, longitude)
         `)
@@ -381,9 +389,11 @@ const UserOrderTracking = ({ orderId }: { orderId: string }) => {
     : undefined;
 
   // Get user location from address or profile
-  const userLocation = orderData?.addresses?.latitude && orderData?.addresses?.longitude
-    ? { lat: orderData.addresses.latitude, lon: orderData.addresses.longitude }
-    : undefined;
+  const userLocation = (orderData?.alt_drop_latitude != null && orderData?.alt_drop_longitude != null)
+    ? { lat: orderData.alt_drop_latitude as number, lon: orderData.alt_drop_longitude as number }
+    : (orderData?.addresses?.latitude && orderData?.addresses?.longitude
+      ? { lat: orderData.addresses.latitude, lon: orderData.addresses.longitude }
+      : undefined);
 
   if (!partner && !userLocation) return null;
   
