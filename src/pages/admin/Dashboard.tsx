@@ -116,12 +116,6 @@ const AdminDashboard = () => {
             <Card>
               <OrderManagement />
             </Card>
-            <Card>
-              <DeliveryRequestsAdmin />
-            </Card>
-            <Card>
-              <RejectedOrdersAdmin />
-            </Card>
           </TabsContent>
         </Tabs>
       </div>
@@ -132,16 +126,56 @@ const AdminDashboard = () => {
 export default AdminDashboard;
 
 const OrderManagement = () => {
-  const { data: orders, isLoading, refetch, error } = useQuery({
-    queryKey: ['admin-orders'],
+  const [mainTab, setMainTab] = useState<'vendor' | 'delivery-requests' | 'rejected'>('vendor');
+  const [selectedVendorId, setSelectedVendorId] = useState<string | null>(null);
+  const [orderView, setOrderView] = useState<'live' | 'delivered' | 'cancelled'>('live');
+  const [vendorSearch, setVendorSearch] = useState<string>('');
+
+  // Fetch vendors for selection
+  const { data: vendors } = useQuery({
+    queryKey: ['admin-order-vendors'],
     queryFn: async () => {
-      console.log('Fetching orders for admin...');
+      const { data, error } = await supabase
+        .from('vendors')
+        .select('id, business_name')
+        .eq('is_active', true)
+        .order('business_name', { ascending: true });
+      if (error) throw error;
+      return data as Array<{ id: string; business_name: string }>;
+    },
+  });
+
+  // Fetch orders (filtered by vendor if selected)
+  const { data: orders, isLoading, refetch, error } = useQuery({
+    queryKey: ['admin-orders', selectedVendorId],
+    queryFn: async () => {
+      console.log('Fetching orders for admin...', selectedVendorId);
       
-      // First try a simple query to get basic order data
-      const { data: basicOrders, error: basicError } = await supabase
+      // First get basic order data
+      let query = supabase
         .from('orders')
-        .select('*')
-        .order('created_at', { ascending: false });
+        .select('*');
+
+      // If vendor selected, filter orders that have items from that vendor
+      if (selectedVendorId) {
+        // Get order IDs that have items from this vendor
+        const { data: orderItems } = await supabase
+          .from('order_items')
+          .select('order_id, products(vendor_id)')
+          .not('products', 'is', null);
+
+        const vendorOrderIds = new Set(
+          (orderItems || [])
+            .filter((item: any) => item.products?.vendor_id === selectedVendorId)
+            .map((item: any) => item.order_id)
+        );
+
+        if (vendorOrderIds.size === 0) return [];
+        
+        query = query.in('id', Array.from(vendorOrderIds));
+      }
+
+      const { data: basicOrders, error: basicError } = await query.order('created_at', { ascending: false });
       
       console.log('Basic orders query result:', { data: basicOrders, error: basicError });
       
@@ -194,12 +228,23 @@ const OrderManagement = () => {
               )
             `)
             .eq('order_id', order.id);
+
+          // Get latest delivery status from delivery_requests as fallback
+          const { data: dr } = await (supabase as any)
+            .from('delivery_requests')
+            .select('status, updated_at, created_at')
+            .eq('order_id', order.id)
+            .order('updated_at', { ascending: false })
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
           
           return {
             ...order,
             profiles: profile,
             addresses: address,
-            order_items: orderItems || []
+            order_items: orderItems || [],
+            delivery_request_status: dr?.status || null,
           };
         })
       );
@@ -207,14 +252,66 @@ const OrderManagement = () => {
       console.log('Orders with details:', ordersWithDetails);
       return ordersWithDetails;
     },
+    enabled: true,
   });
+
+  // Realtime: refresh when orders or delivery_requests change
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-orders-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        refetch();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'delivery_requests' }, () => {
+        refetch();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [refetch]);
+
+  // Filter orders by view type (live vs delivered vs cancelled)
+  const filteredOrders = orders?.filter(order => {
+    // Use same prioritization: delivery_request_status first, then orders.delivery_status
+    const drStatus = (order as any).delivery_request_status;
+    const effectiveStatus = drStatus || order.delivery_status || 'pending';
+    
+    // If no vendor selected, show all orders
+    if (!selectedVendorId) {
+      if (orderView === 'delivered') {
+        return effectiveStatus === 'delivered';
+      } else if (orderView === 'cancelled') {
+        return effectiveStatus === 'cancelled';
+      } else {
+        // Live orders: exclude delivered and cancelled
+        return effectiveStatus !== 'delivered' && effectiveStatus !== 'cancelled';
+      }
+    }
+    // If vendor selected and order view is set, filter accordingly
+    if (orderView === 'delivered') {
+      return effectiveStatus === 'delivered';
+    } else if (orderView === 'cancelled') {
+      return effectiveStatus === 'cancelled';
+    } else {
+      // Live orders: anything that's not delivered and not cancelled
+      return effectiveStatus !== 'delivered' && effectiveStatus !== 'cancelled';
+    }
+  }) || [];
+
+  // Set default view when vendor is selected
+  useEffect(() => {
+    if (selectedVendorId) {
+      setOrderView('live');
+    }
+  }, [selectedVendorId]);
 
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return 'text-yellow-600 bg-yellow-100';
-      case 'confirmed': return 'text-blue-600 bg-blue-100';
-      case 'shipped': return 'text-purple-600 bg-purple-100';
+      case 'approved': return 'text-blue-600 bg-blue-100';
+      case 'accepted': return 'text-blue-600 bg-blue-100';
+      case 'picked_up': return 'text-purple-600 bg-purple-100';
+      case 'out_for_delivery': return 'text-indigo-600 bg-indigo-100';
       case 'delivered': return 'text-green-600 bg-green-100';
       case 'cancelled': return 'text-red-600 bg-red-100';
       default: return 'text-gray-600 bg-gray-100';
@@ -271,73 +368,227 @@ const OrderManagement = () => {
             <Truck className="h-4 w-4 sm:h-5 sm:w-5 text-primary" /> Order Management
           </CardTitle>
         </CardHeader>
+        {mainTab === 'vendor' && (
         <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto">
           <RefreshCcw className="h-4 w-4 mr-2" /> Refresh
         </Button>
+        )}
       </div>
 
+      {/* Main Navbar/Tabs */}
+      <div className="mb-3 sm:mb-4">
+        <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as 'vendor' | 'delivery-requests' | 'rejected')}>
+          <TabsList className="grid w-full grid-cols-3 h-9 sm:h-10">
+            <TabsTrigger value="vendor" className="text-xs sm:text-sm">
+              <Store className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Vendor</span>
+              <span className="sm:hidden">Vendor</span>
+            </TabsTrigger>
+            <TabsTrigger value="delivery-requests" className="text-xs sm:text-sm">
+              <Truck className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Delivery Requests</span>
+              <span className="sm:hidden">Requests</span>
+            </TabsTrigger>
+            <TabsTrigger value="rejected" className="text-xs sm:text-sm">
+              <Ban className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+              <span className="hidden sm:inline">Rejected/Deleted</span>
+              <span className="sm:hidden">Rejected</span>
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* Vendor Tab Content */}
+      {mainTab === 'vendor' && (
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* Left Side: Vendor List (Table/Column) */}
+          <div className="lg:col-span-1 order-2 lg:order-1">
+            <div className="mb-3">
+              <Input
+                placeholder="Search vendor..."
+                value={vendorSearch}
+                onChange={(e) => setVendorSearch(e.target.value)}
+                className="w-full text-sm"
+              />
+            </div>
+            <div className="border rounded-lg overflow-hidden max-h-[300px] sm:max-h-[400px] lg:max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+              <div className="hidden sm:block">
+                <table className="w-full">
+                  <thead className="bg-muted sticky top-0">
+                    <tr>
+                      <th className="text-left p-2 text-xs font-semibold">Vendor Name</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {vendors?.filter(v => 
+                      !vendorSearch || v.business_name.toLowerCase().includes(vendorSearch.toLowerCase())
+                    ).map((vendor) => (
+                      <tr
+                        key={vendor.id}
+                        onClick={() => setSelectedVendorId(vendor.id)}
+                        className={`cursor-pointer hover:bg-muted/50 transition-colors ${
+                          selectedVendorId === vendor.id ? 'bg-primary/10 border-l-2 border-l-primary' : ''
+                        }`}
+                      >
+                        <td className="p-2 text-sm">
+                          <div className="flex items-center gap-2">
+                            <Store className="h-3 w-3 flex-shrink-0" />
+                            <span className={selectedVendorId === vendor.id ? 'font-semibold' : ''}>
+                              {vendor.business_name}
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {/* Mobile: Button List */}
+              <div className="sm:hidden space-y-1 p-2">
+                {vendors?.filter(v => 
+                  !vendorSearch || v.business_name.toLowerCase().includes(vendorSearch.toLowerCase())
+                ).map((vendor) => (
+                  <button
+                    key={vendor.id}
+                    onClick={() => setSelectedVendorId(vendor.id)}
+                    className={`w-full text-left p-2 rounded border transition-colors ${
+                      selectedVendorId === vendor.id 
+                        ? 'bg-primary text-primary-foreground border-primary' 
+                        : 'bg-background hover:bg-muted border-muted'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 text-xs">
+                      <Store className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{vendor.business_name}</span>
+                    </div>
+                  </button>
+                ))}
+              </div>
+              {vendors?.length === 0 && (
+                <div className="p-3 text-sm text-muted-foreground text-center">No vendors found</div>
+              )}
+            </div>
+          </div>
+
+          {/* Right Side: Orders (Live/Delivered Tabs) */}
+          <div className="lg:col-span-3 order-1 lg:order-2">
+            {selectedVendorId ? (
+              <div className="flex flex-col h-full max-h-[400px] sm:max-h-[500px] lg:max-h-[600px]">
+                {/* Live/Delivered/Cancelled Tabs */}
+                <div className="mb-3 sm:mb-4 flex-shrink-0">
+                  <Tabs value={orderView} onValueChange={(v) => setOrderView(v as 'live' | 'delivered' | 'cancelled')}>
+                    <TabsList className="grid w-full grid-cols-3 h-9 sm:h-10">
+                      <TabsTrigger value="live" className="text-xs sm:text-sm">
+                        <Clock className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">Live Orders</span>
+                        <span className="sm:hidden">Live</span>
+                      </TabsTrigger>
+                      <TabsTrigger value="delivered" className="text-xs sm:text-sm">
+                        <Check className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        Delivered
+                      </TabsTrigger>
+                      <TabsTrigger value="cancelled" className="text-xs sm:text-sm">
+                        <Ban className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" />
+                        <span className="hidden sm:inline">Cancelled</span>
+                        <span className="sm:hidden">Cancelled</span>
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                  <div className="mt-2 text-xs sm:text-sm text-muted-foreground">
+                    Showing {filteredOrders.length} of {orders?.length || 0} orders
+                  </div>
+                </div>
+
+                {/* Orders List with Scroll */}
+                <div className="flex-1 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 -mx-2 sm:mx-0 px-2 sm:px-0">
       {!orders || orders.length === 0 ? (
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">No orders found</p>
-          <p className="text-xs text-muted-foreground">
-            Debug shows: 1 order exists, but query returned {orders?.length || 0} orders
-          </p>
-        </div>
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        No orders found for this vendor
+                      </p>
+                    </div>
+                  ) : filteredOrders.length === 0 ? (
+                    <div className="space-y-2">
+                      <p className="text-xs sm:text-sm text-muted-foreground">
+                        {orderView === 'delivered' ? 'No delivered orders found' : 
+                         orderView === 'cancelled' ? 'No cancelled orders found' : 
+                         'No live orders found'}
+                      </p>
+                    </div>
       ) : (
-        <div className="space-y-3 sm:space-y-4 max-h-[600px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-          {orders.map((order) => (
-            <div key={order.id} className="p-3 sm:p-4 border rounded-lg">
-              <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-3 gap-2">
+                    <div className="space-y-2 sm:space-y-3 sm:pr-2">
+                    {filteredOrders.map((order) => (
+                      <div key={order.id} className="p-2 sm:p-3 lg:p-4 border rounded-lg">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start mb-2 sm:mb-3 gap-2">
                 <div className="min-w-0 flex-1">
-                  <h3 className="font-semibold text-sm sm:text-base">Order #{order.id.slice(-8)}</h3>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
+                            <h3 className="font-semibold text-xs sm:text-sm lg:text-base">Order #{order.id.slice(-8)}</h3>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground">
                     {new Date(order.created_at).toLocaleString()}
                   </p>
                 </div>
                 <div className="text-left sm:text-right">
-                  <p className="font-semibold text-sm sm:text-base">₹{order.final_amount?.toFixed(2) || '0.00'}</p>
-                  <div className="flex flex-wrap gap-1 sm:gap-2 mt-1">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.delivery_status)}`}>
-                      {order.delivery_status}
+                            <p className="font-semibold text-xs sm:text-sm lg:text-base">₹{order.final_amount?.toFixed(2) || '0.00'}</p>
+                            <div className="flex flex-wrap gap-1 mt-1">
+                    {(() => {
+                      // Prioritize delivery_request_status: if it exists, use it; otherwise use orders.delivery_status
+                      const drStatus = (order as any).delivery_request_status;
+                      const orderStatus = order.delivery_status || 'pending';
+                      
+                      // Use delivery_requests status if available, otherwise fall back to orders.delivery_status
+                      const displayStatus = drStatus || orderStatus;
+                      
+                      return (
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(displayStatus)}`}>
+                          Delivery: {displayStatus}
                     </span>
+                      );
+                    })()}
+                    {(() => {
+                      const ps = (order.payment_status || '').toString().toLowerCase();
+                      if (ps === 'cod' || ps === 'paid') {
+                        return (
                     <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPaymentStatusColor(order.payment_status)}`}>
-                      {order.payment_status}
+                            Payment: {ps === 'cod' ? 'COD' : 'Paid'}
                     </span>
+                        );
+                      }
+                      return null;
+                    })()}
                   </div>
                 </div>
               </div>
 
               {/* Customer Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mb-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 lg:gap-4 mb-2 sm:mb-3">
                 <div>
-                  <h4 className="font-medium text-xs sm:text-sm mb-1">Customer</h4>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
+                            <h4 className="font-medium text-[10px] sm:text-xs lg:text-sm mb-1">Customer</h4>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground break-words">
                     {order.profiles?.full_name || 'N/A'}
                   </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
+                            <p className="text-[10px] sm:text-xs text-muted-foreground">
                     {order.profiles?.phone || 'N/A'}
                   </p>
                 </div>
                 <div>
-                  <h4 className="font-medium text-xs sm:text-sm mb-1">Delivery Address</h4>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
+                            <h4 className="font-medium text-[10px] sm:text-xs lg:text-sm mb-1">Delivery Address</h4>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground">
                     {order.addresses?.label || 'N/A'}
                   </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground break-words">
+                            <p className="text-[10px] sm:text-xs text-muted-foreground break-words">
                     {order.addresses?.full_address || 'N/A'}
                   </p>
-                  <p className="text-xs sm:text-sm text-muted-foreground">
+                            <p className="text-[10px] sm:text-xs text-muted-foreground">
                     {order.addresses?.city}, {order.addresses?.state} - {order.addresses?.pincode}
                   </p>
                 </div>
               </div>
 
               {/* Order Items */}
-              <div className="mb-3">
-                <h4 className="font-medium text-xs sm:text-sm mb-2">Order Items</h4>
+                        <div className="mb-2 sm:mb-3">
+                          <h4 className="font-medium text-[10px] sm:text-xs lg:text-sm mb-1 sm:mb-2">Order Items</h4>
                 <div className="space-y-1">
                   {order.order_items?.map((item) => (
-                    <div key={item.id} className="flex flex-col sm:flex-row sm:justify-between text-xs sm:text-sm gap-1">
+                              <div key={item.id} className="flex flex-col sm:flex-row sm:justify-between text-[10px] sm:text-xs lg:text-sm gap-1">
                       <span className="break-words">
                         {item.snapshot_name} x {item.quantity}
                         {item.products?.vendors?.business_name && (
@@ -346,19 +597,128 @@ const OrderManagement = () => {
                           </span>
                         )}
                       </span>
-                      <span className="font-semibold">
+                                <span className="font-semibold whitespace-nowrap">
                         ₹{(item.snapshot_price * item.quantity).toFixed(2)}
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
+            </div>
+          ))}
+        </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-center h-[250px] sm:h-[300px] lg:h-[400px] border rounded-lg bg-muted/20">
+                <div className="text-center px-4">
+                  <Store className="h-8 w-8 sm:h-12 sm:w-12 mx-auto mb-2 sm:mb-3 text-muted-foreground" />
+                  <p className="text-xs sm:text-sm font-medium text-muted-foreground">Select a vendor to view orders</p>
+                  <p className="text-[10px] sm:text-xs text-muted-foreground mt-1">Choose a vendor from the list to see their live and delivered orders</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
+      {/* Delivery Requests Tab Content */}
+      {mainTab === 'delivery-requests' && (
+        <DeliveryRequestsTabContent />
+      )}
+
+      {/* Rejected/Deleted Orders Tab Content */}
+      {mainTab === 'rejected' && (
+        <RejectedOrdersTabContent />
+      )}
+    </CardContent>
+  );
+};
+
+// Tab content components
+const DeliveryRequestsTabContent = () => {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['admin-delivery-requests'],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from('delivery_requests')
+        .select('id, order_id, status, assigned_partner_id, vendor_id, user_id, created_at, updated_at')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+
+  return (
+    <>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-4 gap-2">
+        <div className="text-xs sm:text-sm font-medium">Delivery Requests</div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto text-xs sm:text-sm h-8 sm:h-9">
+          <RefreshCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> Refresh
+        </Button>
+      </div>
+      {isLoading ? (
+        <p className="text-xs sm:text-sm text-muted-foreground">Loading delivery requests...</p>
+      ) : !data || data.length === 0 ? (
+        <p className="text-xs sm:text-sm text-muted-foreground">No delivery requests.</p>
+      ) : (
+        <div className="space-y-2 max-h-[400px] sm:max-h-[550px] lg:max-h-[650px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          {data.map((r) => (
+            <div key={r.id} className="p-2 sm:p-3 border rounded text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-[10px] sm:text-xs lg:text-sm">Order #{r.order_id?.slice(0,8)}</div>
+                <div className="text-[10px] sm:text-xs text-muted-foreground">{new Date(r.created_at).toLocaleString()} • Status: {r.status}</div>
+              </div>
+              <div className="text-[10px] sm:text-xs text-muted-foreground">Partner: {r.assigned_partner_id ? r.assigned_partner_id.slice(0,8) : 'Not assigned'}</div>
             </div>
           ))}
         </div>
       )}
-    </CardContent>
+    </>
+  );
+};
+
+const RejectedOrdersTabContent = () => {
+  const { data, isLoading, refetch } = useQuery({
+    queryKey: ['admin-rejected-orders'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('delivery_status', 'cancelled')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data as any[];
+    },
+  });
+
+  return (
+    <>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-3 sm:mb-4 gap-2">
+        <div className="text-xs sm:text-sm font-medium">Rejected/Deleted Orders</div>
+        <Button variant="outline" size="sm" onClick={() => refetch()} className="w-full sm:w-auto text-xs sm:text-sm h-8 sm:h-9">
+          <RefreshCcw className="h-3 w-3 sm:h-4 sm:w-4 mr-1 sm:mr-2" /> Refresh
+        </Button>
+      </div>
+      {isLoading ? (
+        <p className="text-xs sm:text-sm text-muted-foreground">Loading rejected orders...</p>
+      ) : !data || data.length === 0 ? (
+        <p className="text-xs sm:text-sm text-muted-foreground">No rejected or deleted orders.</p>
+      ) : (
+        <div className="space-y-2 max-h-[400px] sm:max-h-[550px] lg:max-h-[650px] overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          {data.map((o) => (
+            <div key={o.id} className="p-2 sm:p-3 border rounded text-xs sm:text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium text-[10px] sm:text-xs lg:text-sm">Order #{o.id.slice(0,8)}</div>
+                <div className="text-[10px] sm:text-xs text-muted-foreground">{new Date(o.created_at).toLocaleString()} • Cancelled</div>
+              </div>
+              <div className="text-[10px] sm:text-xs lg:text-sm font-semibold">₹{o.final_amount?.toFixed(2) || '0.00'}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
   );
 };
 
