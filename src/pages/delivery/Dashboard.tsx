@@ -825,29 +825,43 @@ const AssignedRequests = () => {
 
               {view === 'live' && (r.orders?.delivery_status === 'picked_up' || r.status === 'picked_up') && (
                   <>
-                    {/* Customer Contact Info persists after picked_up */}
+                    {/* Detailed customer info persists after picked_up */}
                     {(() => {
                       const nestedAddr = r.orders?.addresses;
                       const nestedPhone = Array.isArray(nestedAddr) ? nestedAddr[0]?.phone : nestedAddr?.phone;
+                      const nestedAddressLine = Array.isArray(nestedAddr) ? nestedAddr[0]?.full_address : nestedAddr?.full_address;
                       const fb = addressByOrderId[r.order_id] || {};
+                      const ufb = userByOrderId[r.order_id] || {};
                       const phoneNumber = nestedPhone || fb.phone || null;
-                      if (phoneNumber) {
+                      const addressLine = nestedAddressLine || fb.full_address || null;
+                      const cityState = [fb.city, fb.state].filter(Boolean).join(', ');
+                      const pin = fb.pincode ? ` - ${fb.pincode}` : '';
+                      if (phoneNumber || addressLine) {
                         return (
-                          <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded mb-3">
-                            <Phone className="h-4 w-4 text-green-600" />
-                            <span className="text-sm font-medium text-green-900 flex-1">
-                              Contact Customer: {phoneNumber}
-                            </span>
-                            <a href={`tel:${phoneNumber.replace(/\D/g, '')}`}>
-                              <Button size="sm" className="bg-green-600 hover:bg-green-700">
-                                <Phone className="h-3 w-3 mr-1" /> Call Customer
-                              </Button>
-                            </a>
+                          <div className="p-2 border rounded bg-muted/20 text-xs space-y-1 mb-3">
+                            {ufb.full_name && (
+                              <div className="font-medium text-foreground">Customer: {ufb.full_name}</div>
+                            )}
+                            {addressLine && (
+                              <div className="text-muted-foreground">
+                                Delivery: {addressLine}{cityState || pin ? `, ${cityState}${pin}` : ''}
+                              </div>
+                            )}
+                            {phoneNumber && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="h-3 w-3 text-green-600" />
+                                <span className="font-medium">{phoneNumber}</span>
+                                <a href={`tel:${phoneNumber.replace(/\D/g, '')}`} className="ml-auto">
+                                  <Button size="sm" variant="outline" className="h-7">Call</Button>
+                                </a>
+                              </div>
+                            )}
                           </div>
                         );
                       }
                       return null;
                     })()}
+                    
 
                     <div className="flex gap-2">
                       <Button size="sm" onClick={() => { openNavToCustomer(r); markOutForDelivery.mutate(r); }}>Out for Delivery</Button>
@@ -857,24 +871,37 @@ const AssignedRequests = () => {
 
               {view === 'live' && (r.orders?.delivery_status === 'out_for_delivery' || r.status === 'out_for_delivery') && (
                   <>
-                    {/* Customer Contact Info persists during out_for_delivery */}
+                    {/* Detailed customer info persists during out_for_delivery */}
                     {(() => {
                       const nestedAddr = r.orders?.addresses;
                       const nestedPhone = Array.isArray(nestedAddr) ? nestedAddr[0]?.phone : nestedAddr?.phone;
+                      const nestedAddressLine = Array.isArray(nestedAddr) ? nestedAddr[0]?.full_address : nestedAddr?.full_address;
                       const fb = addressByOrderId[r.order_id] || {};
+                      const ufb = userByOrderId[r.order_id] || {};
                       const phoneNumber = nestedPhone || fb.phone || null;
-                      if (phoneNumber) {
+                      const addressLine = nestedAddressLine || fb.full_address || null;
+                      const cityState = [fb.city, fb.state].filter(Boolean).join(', ');
+                      const pin = fb.pincode ? ` - ${fb.pincode}` : '';
+                      if (phoneNumber || addressLine) {
                         return (
-                          <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded mb-3">
-                            <Phone className="h-4 w-4 text-green-600" />
-                            <span className="text-sm font-medium text-green-900 flex-1">
-                              Contact Customer: {phoneNumber}
-                            </span>
-                            <a href={`tel:${phoneNumber.replace(/\D/g, '')}`}>
-                              <Button size="sm" className="bg-green-600 hover:bg-green-700">
-                                <Phone className="h-3 w-3 mr-1" /> Call Customer
-                              </Button>
-                            </a>
+                          <div className="p-2 border rounded bg-muted/20 text-xs space-y-1 mb-3">
+                            {ufb.full_name && (
+                              <div className="font-medium text-foreground">Customer: {ufb.full_name}</div>
+                            )}
+                            {addressLine && (
+                              <div className="text-muted-foreground">
+                                Delivery: {addressLine}{cityState || pin ? `, ${cityState}${pin}` : ''}
+                              </div>
+                            )}
+                            {phoneNumber && (
+                              <div className="flex items-center gap-2">
+                                <Phone className="h-3 w-3 text-green-600" />
+                                <span className="font-medium">{phoneNumber}</span>
+                                <a href={`tel:${phoneNumber.replace(/\D/g, '')}`} className="ml-auto">
+                                  <Button size="sm" variant="outline" className="h-7">Call</Button>
+                                </a>
+                              </div>
+                            )}
                           </div>
                         );
                       }
